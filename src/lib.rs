@@ -96,6 +96,7 @@
 //! Users implement these traits on their own data structures, giving them full control
 //! over data storage and behavior while the library handles rendering and interaction.
 
+mod state;
 mod traits;
 
 // Re-export all public types from traits module
@@ -106,3 +107,6 @@ pub use traits::{
     OutlinerActions,
     OutlinerNode,
 };
+
+// Re-export state management
+pub use state::OutlinerState;
