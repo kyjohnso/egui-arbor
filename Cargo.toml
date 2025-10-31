@@ -5,3 +5,10 @@ edition = "2024"
 
 [dependencies]
 egui = "0.29"
+
+[dev-dependencies]
+eframe = "0.29"
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"

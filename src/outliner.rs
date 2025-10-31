@@ -125,25 +125,27 @@ impl Outliner {
         // Load state from previous frame
         let mut state = OutlinerState::load(ui.ctx(), self.id);
 
-        // Create the outliner response wrapper
-        let mut outliner_response = OutlinerResponse::new(
-            ui.allocate_response(ui.available_size(), egui::Sense::hover())
-        );
-
-        // Render within a scroll area
-        egui::ScrollArea::vertical()
+        // Render within a scroll area and capture the inner response
+        let scroll_output = egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                // Create the outliner response wrapper
+                let mut outliner_response = OutlinerResponse::new(
+                    ui.allocate_response(egui::vec2(ui.available_width(), 0.0), egui::Sense::hover())
+                );
+
                 // Render all root nodes
                 for node in nodes {
                     self.render_node(ui, node, 0, &mut state, actions, &mut outliner_response);
                 }
+
+                outliner_response
             });
 
         // Store state for next frame
         state.store(ui.ctx(), self.id);
 
-        outliner_response
+        scroll_output.inner
     }
 
     /// Renders a single node and its children recursively.
