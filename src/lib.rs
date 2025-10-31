@@ -3,11 +3,13 @@
 //! This crate provides a customizable tree/outliner widget for egui applications,
 //! with support for hierarchical data, expand/collapse functionality, and custom styling.
 
+pub mod response;
 pub mod state;
 pub mod style;
 pub mod traits;
 
 // Re-export main types for convenience
+pub use response::{DropEvent, OutlinerResponse};
 pub use state::OutlinerState;
 pub use style::{ExpandIconStyle, Style};
 pub use traits::{ActionIcon, DropPosition, IconType, OutlinerActions, OutlinerNode};
