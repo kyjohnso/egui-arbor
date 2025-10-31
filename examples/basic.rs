@@ -79,6 +79,65 @@ impl TreeNode {
 
         false
     }
+
+    /// Remove a node by ID and return it if found
+    fn remove_node(&mut self, id: u64) -> Option<TreeNode> {
+        for i in 0..self.children.len() {
+            if self.children[i].id == id {
+                return Some(self.children.remove(i));
+            }
+            if let Some(node) = self.children[i].remove_node(id) {
+                return Some(node);
+            }
+        }
+        None
+    }
+
+    /// Insert a node at a specific position relative to a target node
+    fn insert_node(&mut self, target_id: u64, node: TreeNode, position: DropPosition) -> bool {
+        // Check if this is the target node
+        if self.id == target_id {
+            match position {
+                DropPosition::Inside => {
+                    if self.is_collection {
+                        self.children.push(node);
+                        return true;
+                    }
+                }
+                _ => {
+                    // Can't insert before/after at root level
+                    return false;
+                }
+            }
+        }
+
+        // Search in children
+        for i in 0..self.children.len() {
+            if self.children[i].id == target_id {
+                match position {
+                    DropPosition::Before => {
+                        self.children.insert(i, node);
+                        return true;
+                    }
+                    DropPosition::After => {
+                        self.children.insert(i + 1, node);
+                        return true;
+                    }
+                    DropPosition::Inside => {
+                        if self.children[i].is_collection {
+                            self.children[i].children.push(node);
+                            return true;
+                        }
+                    }
+                }
+            }
+            if self.children[i].insert_node(target_id, node.clone(), position) {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 impl OutlinerNode for TreeNode {
@@ -150,8 +209,10 @@ impl OutlinerActions<TreeNode> for TreeActions {
         // This callback is just for notification
     }
 
-    fn on_move(&mut self, _id: &u64, _target: &u64, _position: DropPosition) {
-        // Drag-drop not yet implemented in this example
+    fn on_move(&mut self, id: &u64, target: &u64, position: DropPosition) {
+        // Store the move operation for the app to handle
+        // We can't modify the tree directly here since we don't have access to it
+        println!("Move requested: node {} to target {} at position {:?}", id, target, position);
     }
 
     fn on_select(&mut self, id: &u64, selected: bool) {
@@ -173,12 +234,38 @@ impl OutlinerActions<TreeNode> for TreeActions {
     fn is_locked(&self, id: &u64) -> bool {
         self.locked.contains(id)
     }
+
+    fn on_visibility_toggle(&mut self, id: &u64) {
+        if self.visible.contains(id) {
+            self.visible.remove(id);
+        } else {
+            self.visible.insert(*id);
+        }
+    }
+
+    fn on_lock_toggle(&mut self, id: &u64) {
+        if self.locked.contains(id) {
+            self.locked.remove(id);
+        } else {
+            self.locked.insert(*id);
+        }
+    }
+
+    fn on_selection_toggle(&mut self, id: &u64) {
+        let is_selected = self.is_selected(id);
+        self.on_select(id, !is_selected);
+    }
+
+    fn on_custom_action(&mut self, _id: &u64, _icon: &str) {
+        // Custom actions not used in this example
+    }
 }
 
 /// The main application
 struct ExampleApp {
     tree: Vec<TreeNode>,
     actions: TreeActions,
+    last_drop_event: Option<String>,
 }
 
 impl ExampleApp {
@@ -296,6 +383,7 @@ impl ExampleApp {
         Self {
             tree,
             actions: TreeActions::new(),
+            last_drop_event: None,
         }
     }
 }
@@ -328,6 +416,40 @@ impl eframe::App for ExampleApp {
                 }
             }
 
+            // Handle drag-drop events
+            if let Some(drop_event) = response.drop_event() {
+                let source_id = &drop_event.source;
+                let target_id = &drop_event.target;
+                let position = drop_event.position;
+
+                // Remove the source node from the tree
+                let mut removed_node = None;
+                for root in &mut self.tree {
+                    if let Some(node) = root.remove_node(*source_id) {
+                        removed_node = Some(node);
+                        break;
+                    }
+                }
+
+                // Insert the node at the target position
+                if let Some(node) = removed_node {
+                    let mut inserted = false;
+                    for root in &mut self.tree {
+                        if root.insert_node(*target_id, node.clone(), position) {
+                            inserted = true;
+                            break;
+                        }
+                    }
+                    
+                    if inserted {
+                        self.last_drop_event = Some(format!(
+                            "Moved node {} to target {} ({:?})",
+                            source_id, target_id, position
+                        ));
+                    }
+                }
+            }
+
             ui.separator();
 
             // Display information about the current state
@@ -354,6 +476,10 @@ impl eframe::App for ExampleApp {
 
             if let Some(id) = response.context_menu() {
                 ui.label(format!("Context menu requested for node: {}", id));
+            }
+
+            if let Some(ref event) = self.last_drop_event {
+                ui.label(format!("Last drop: {}", event));
             }
         });
     }

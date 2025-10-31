@@ -94,14 +94,14 @@ pub trait OutlinerNode: Sized {
     ///
     /// ```rust
     /// # use egui_arbor::{OutlinerNode, IconType};
-    /// # struct MyNode;
+    /// # struct MyNode { children: Vec<MyNode> }
     /// # impl OutlinerNode for MyNode {
     /// #     type Id = u64;
     /// #     fn id(&self) -> Self::Id { 0 }
     /// #     fn name(&self) -> &str { "" }
     /// #     fn is_collection(&self) -> bool { false }
-    /// #     fn children(&self) -> &[Self] { &[] }
-    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut vec![] }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
     /// fn icon(&self) -> Option<IconType> {
     ///     if self.is_collection() {
     ///         Some(IconType::Collection)
@@ -190,6 +190,31 @@ pub trait OutlinerNode: Sized {
 ///     fn is_locked(&self, id: &u64) -> bool {
 ///         self.locked.contains(id)
 ///     }
+///
+///     fn on_visibility_toggle(&mut self, id: &u64) {
+///         if self.visible.contains(id) {
+///             self.visible.remove(id);
+///         } else {
+///             self.visible.insert(*id);
+///         }
+///     }
+///
+///     fn on_lock_toggle(&mut self, id: &u64) {
+///         if self.locked.contains(id) {
+///             self.locked.remove(id);
+///         } else {
+///             self.locked.insert(*id);
+///         }
+///     }
+///
+///     fn on_selection_toggle(&mut self, id: &u64) {
+///         let is_selected = self.is_selected(id);
+///         self.on_select(id, !is_selected);
+///     }
+///
+///     fn on_custom_action(&mut self, _id: &u64, _icon: &str) {
+///         // Handle custom action
+///     }
 /// }
 /// ```
 pub trait OutlinerActions<N: OutlinerNode> {
@@ -245,6 +270,47 @@ pub trait OutlinerActions<N: OutlinerNode> {
     /// "locked" is up to the implementation (e.g., locked from editing, locked
     /// from selection, etc.).
     fn is_locked(&self, id: &N::Id) -> bool;
+
+    /// Called when the visibility action icon is clicked.
+    ///
+    /// This is triggered when the user clicks the visibility icon (eye icon).
+    /// The implementation should toggle the visibility state of the node.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The unique identifier of the node whose visibility is being toggled
+    fn on_visibility_toggle(&mut self, id: &N::Id);
+
+    /// Called when the lock action icon is clicked.
+    ///
+    /// This is triggered when the user clicks the lock icon.
+    /// The implementation should toggle the lock state of the node.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The unique identifier of the node whose lock state is being toggled
+    fn on_lock_toggle(&mut self, id: &N::Id);
+
+    /// Called when the selection action icon is clicked.
+    ///
+    /// This is triggered when the user clicks the selection icon (checkbox).
+    /// The implementation should toggle the selection state of the node.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The unique identifier of the node whose selection is being toggled
+    fn on_selection_toggle(&mut self, id: &N::Id);
+
+    /// Called when a custom action icon is clicked.
+    ///
+    /// This is triggered when the user clicks a custom action icon.
+    /// The implementation should handle the custom action based on the icon identifier.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The unique identifier of the node
+    /// * `icon` - The icon identifier from the custom action icon
+    fn on_custom_action(&mut self, id: &N::Id, icon: &str);
 }
 
 /// The type of icon to display next to a node.

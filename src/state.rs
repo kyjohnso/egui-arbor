@@ -4,6 +4,7 @@
 //! and editing state of nodes in the outliner. The state integrates with egui's
 //! memory system to persist across frames.
 
+use crate::drag_drop::DragDropState;
 use std::collections::HashSet;
 use std::hash::Hash;
 
@@ -50,6 +51,13 @@ where
     /// When `Some(id)`, the node with the given ID is in edit mode (e.g., for renaming).
     /// Only one node can be edited at a time.
     editing: Option<Id>,
+
+    /// Drag-and-drop state for this outliner.
+    ///
+    /// Tracks the current drag operation, hover targets, and drop positions.
+    /// This field is not persisted across frames (it's transient state).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    drag_drop: DragDropState<Id>,
 }
 
 impl<Id> Default for OutlinerState<Id>
@@ -61,6 +69,7 @@ where
         Self {
             expanded: HashSet::new(),
             editing: None,
+            drag_drop: DragDropState::new(),
         }
     }
 }
@@ -250,6 +259,33 @@ where
     /// ```
     pub fn stop_editing(&mut self) {
         self.editing = None;
+    }
+
+    /// Returns a reference to the drag-drop state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use egui_arbor::OutlinerState;
+    /// let state = OutlinerState::<String>::default();
+    /// assert!(!state.drag_drop().is_dragging());
+    /// ```
+    pub fn drag_drop(&self) -> &DragDropState<Id> {
+        &self.drag_drop
+    }
+
+    /// Returns a mutable reference to the drag-drop state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use egui_arbor::OutlinerState;
+    /// let mut state = OutlinerState::<String>::default();
+    /// state.drag_drop_mut().start_drag("node1".to_string());
+    /// assert!(state.drag_drop().is_dragging());
+    /// ```
+    pub fn drag_drop_mut(&mut self) -> &mut DragDropState<Id> {
+        &mut self.drag_drop
     }
 }
 

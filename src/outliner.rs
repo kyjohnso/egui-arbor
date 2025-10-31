@@ -5,10 +5,11 @@
 //! custom actions.
 
 use crate::{
-    response::OutlinerResponse,
+    drag_drop::{calculate_drop_position, validate_drop, DragDropVisuals},
+    response::{DropEvent, OutlinerResponse},
     state::OutlinerState,
     style::Style,
-    traits::{ActionIcon, OutlinerActions, OutlinerNode},
+    traits::{ActionIcon, DropPosition, OutlinerActions, OutlinerNode},
 };
 
 /// The main outliner widget for rendering hierarchical tree structures.
@@ -38,6 +39,9 @@ pub struct Outliner {
     
     /// Visual styling configuration.
     style: Style,
+
+    /// Visual configuration for drag-drop operations.
+    drag_drop_visuals: DragDropVisuals,
 }
 
 impl Outliner {
@@ -59,6 +63,7 @@ impl Outliner {
         Self {
             id: id.into(),
             style: Style::default(),
+            drag_drop_visuals: DragDropVisuals::default(),
         }
     }
 
@@ -78,6 +83,25 @@ impl Outliner {
     /// ```
     pub fn with_style(mut self, style: Style) -> Self {
         self.style = style;
+        self
+    }
+
+    /// Sets custom drag-drop visuals for this outliner.
+    ///
+    /// # Arguments
+    ///
+    /// * `visuals` - The drag-drop visual configuration to use
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use egui_arbor::{Outliner, DragDropVisuals};
+    ///
+    /// let outliner = Outliner::new("my_outliner")
+    ///     .with_drag_drop_visuals(DragDropVisuals::default());
+    /// ```
+    pub fn with_drag_drop_visuals(mut self, visuals: DragDropVisuals) -> Self {
+        self.drag_drop_visuals = visuals;
         self
     }
 
@@ -136,7 +160,7 @@ impl Outliner {
 
                 // Render all root nodes
                 for node in nodes {
-                    self.render_node(ui, node, 0, &mut state, actions, &mut outliner_response);
+                    self.render_node(ui, node, 0, nodes, &mut state, actions, &mut outliner_response);
                 }
 
                 outliner_response
@@ -157,11 +181,13 @@ impl Outliner {
     /// - Node label (clickable, editable)
     /// - Action icons
     /// - Recursive rendering of children (if expanded)
+    #[allow(clippy::too_many_arguments)]
     fn render_node<N, A>(
         &self,
         ui: &mut egui::Ui,
         node: &N,
         depth: usize,
+        all_nodes: &[N],
         state: &mut OutlinerState<N::Id>,
         actions: &mut A,
         response: &mut OutlinerResponse<N::Id>,
@@ -175,8 +201,13 @@ impl Outliner {
         let is_editing = state.is_editing(&node_id);
         let is_selected = actions.is_selected(&node_id);
 
+        // Check drag-drop state
+        let is_dragging = state.drag_drop().is_dragging_node(&node_id);
+        let is_hover_target = state.drag_drop().is_hover_target(&node_id);
+        let drop_position = state.drag_drop().current_drop_position();
+
         // Start horizontal layout for this row
-        ui.horizontal(|ui| {
+        let row_response = ui.horizontal(|ui| {
             // Add indentation
             ui.add_space(depth as f32 * self.style.indent);
 
@@ -235,12 +266,134 @@ impl Outliner {
             });
         });
 
+        let row_rect = row_response.response.rect;
+
+        // Create a drag-sense response for the entire row
+        let (_drag_rect, drag_response) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), 0.0),
+            egui::Sense::click().union(egui::Sense::drag()),
+        );
+
+        // Handle drag-drop interactions
+        if !is_editing {
+            // Detect drag start
+            if drag_response.drag_started() {
+                state.drag_drop_mut().start_drag(node_id.clone());
+                response.drag_started = Some(node_id.clone());
+                response.changed = true;
+            }
+
+            // Handle hover for drop target detection
+            if state.drag_drop().is_dragging() && !is_dragging
+                && drag_response.hovered() {
+                    // Calculate drop position based on cursor location
+                    if let Some(cursor_pos) = ui.ctx().pointer_hover_pos() {
+                        let position = calculate_drop_position(
+                            cursor_pos.y,
+                            row_rect,
+                            is_collection,
+                        );
+
+                        // Validate the drop
+                        if let Some(source_id) = state.drag_drop().dragging_id() {
+                            let is_valid = validate_drop(
+                                source_id,
+                                &node_id,
+                                position,
+                                node,
+                                |target, source| Self::is_descendant_of_impl(all_nodes, target, source),
+                            );
+
+                            if is_valid {
+                                state.drag_drop_mut().update_hover(node_id.clone(), position);
+                            } else {
+                                state.drag_drop_mut().clear_hover();
+                            }
+                        }
+                    }
+                }
+
+            // Handle drop
+            if state.drag_drop().is_dragging() && ui.input(|i| i.pointer.any_released())
+                && let Some((source_id, target_id, position)) = state.drag_drop_mut().end_drag() {
+                    // Invoke the on_move callback
+                    actions.on_move(&source_id, &target_id, position);
+                    
+                    // Record the drop event in the response
+                    response.drop_event = Some(DropEvent::new(source_id, target_id, position));
+                    response.changed = true;
+                }
+        }
+
+        // Draw visual feedback for drag-drop
+        if is_dragging {
+            self.drag_drop_visuals.draw_drag_source(ui.painter(), row_rect);
+        }
+
+        if is_hover_target
+            && let Some(position) = drop_position {
+                match position {
+                    DropPosition::Before | DropPosition::After => {
+                        self.drag_drop_visuals.draw_drop_line(ui.painter(), row_rect, position);
+                    }
+                    DropPosition::Inside => {
+                        self.drag_drop_visuals.draw_drop_highlight(ui.painter(), row_rect);
+                    }
+                }
+            }
+
         // Render children if this is an expanded collection
         if is_collection && is_expanded {
             for child in node.children() {
-                self.render_node(ui, child, depth + 1, state, actions, response);
+                self.render_node(ui, child, depth + 1, all_nodes, state, actions, response);
             }
         }
+    }
+
+    /// Helper function to check if target_id is a descendant of source_id.
+    ///
+    /// This is used to prevent circular dependencies in drag-drop operations.
+    fn is_descendant_of_impl<N>(all_nodes: &[N], target_id: &N::Id, source_id: &N::Id) -> bool
+    where
+        N: OutlinerNode,
+    {
+        // Find the source node
+        if let Some(source_node) = Self::find_node_by_id_impl(all_nodes, source_id) {
+            return Self::contains_descendant_impl(source_node, target_id);
+        }
+        false
+    }
+
+    /// Helper function to find a node by its ID.
+    fn find_node_by_id_impl<'a, N>(nodes: &'a [N], id: &N::Id) -> Option<&'a N>
+    where
+        N: OutlinerNode,
+    {
+        for node in nodes {
+            if node.id() == *id {
+                return Some(node);
+            }
+            if let Some(found) = Self::find_node_by_id_impl(node.children(), id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    /// Helper function to check if a node contains a descendant with the given ID.
+    fn contains_descendant_impl<N>(node: &N, target_id: &N::Id) -> bool
+    where
+        N: OutlinerNode,
+    {
+        for child in node.children() {
+            if child.id() == *target_id {
+                return true;
+            }
+            if Self::contains_descendant_impl(child, target_id) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Renders the expand/collapse arrow icon.
@@ -277,6 +430,7 @@ impl Outliner {
     /// Renders the node label, either as a selectable label or text edit.
     ///
     /// Returns the response from the label or text edit.
+    #[allow(clippy::too_many_arguments)]
     fn render_node_label<N, A>(
         &self,
         ui: &mut egui::Ui,
@@ -362,7 +516,7 @@ impl Outliner {
     ///
     /// Icons are rendered right-to-left in the order they appear in the
     /// node's action_icons() list.
-    fn render_action_icons<N, A>(&self, ui: &mut egui::Ui, node: &N, actions: &A)
+    fn render_action_icons<N, A>(&self, ui: &mut egui::Ui, node: &N, actions: &mut A)
     where
         N: OutlinerNode,
         A: OutlinerActions<N>,
@@ -370,52 +524,133 @@ impl Outliner {
         let node_id = node.id();
         
         for action_icon in node.action_icons().iter().rev() {
-            let (icon_text, is_active) = match action_icon {
+            match action_icon {
                 ActionIcon::Visibility => {
                     let is_visible = actions.is_visible(&node_id);
-                    (if is_visible { "👁" } else { "🚫" }, is_visible)
+                    let icon_text = if is_visible { "👁" } else { "🚫" };
+                    
+                    let (rect, icon_response) = ui.allocate_exact_size(
+                        egui::vec2(self.style.action_icon_size, self.style.row_height),
+                        egui::Sense::click(),
+                    );
+
+                    if ui.is_rect_visible(rect) {
+                        let visuals = ui.style().interact(&icon_response);
+                        let text_color = if is_visible {
+                            visuals.text_color()
+                        } else {
+                            visuals.text_color().gamma_multiply(0.5)
+                        };
+
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            icon_text,
+                            egui::FontId::proportional(self.style.action_icon_size * 0.8),
+                            text_color,
+                        );
+                    }
+
+                    // Handle click to toggle visibility
+                    if icon_response.clicked() {
+                        actions.on_visibility_toggle(&node_id);
+                    }
                 }
                 ActionIcon::Lock => {
                     let is_locked = actions.is_locked(&node_id);
-                    (if is_locked { "🔒" } else { "🔓" }, is_locked)
+                    let icon_text = if is_locked { "🔒" } else { "🔓" };
+                    
+                    let (rect, icon_response) = ui.allocate_exact_size(
+                        egui::vec2(self.style.action_icon_size, self.style.row_height),
+                        egui::Sense::click(),
+                    );
+
+                    if ui.is_rect_visible(rect) {
+                        let visuals = ui.style().interact(&icon_response);
+                        let text_color = if is_locked {
+                            visuals.text_color()
+                        } else {
+                            visuals.text_color().gamma_multiply(0.5)
+                        };
+
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            icon_text,
+                            egui::FontId::proportional(self.style.action_icon_size * 0.8),
+                            text_color,
+                        );
+                    }
+
+                    // Handle click to toggle lock state
+                    if icon_response.clicked() {
+                        actions.on_lock_toggle(&node_id);
+                    }
                 }
                 ActionIcon::Selection => {
                     let is_selected = actions.is_selected(&node_id);
-                    (if is_selected { "☑" } else { "☐" }, is_selected)
+                    let icon_text = if is_selected { "☑" } else { "☐" };
+                    
+                    let (rect, icon_response) = ui.allocate_exact_size(
+                        egui::vec2(self.style.action_icon_size, self.style.row_height),
+                        egui::Sense::click(),
+                    );
+
+                    if ui.is_rect_visible(rect) {
+                        let visuals = ui.style().interact(&icon_response);
+                        let text_color = if is_selected {
+                            visuals.text_color()
+                        } else {
+                            visuals.text_color().gamma_multiply(0.5)
+                        };
+
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            icon_text,
+                            egui::FontId::proportional(self.style.action_icon_size * 0.8),
+                            text_color,
+                        );
+                    }
+
+                    // Handle click to toggle selection
+                    if icon_response.clicked() {
+                        actions.on_selection_toggle(&node_id);
+                    }
                 }
                 ActionIcon::Custom { icon, tooltip } => {
-                    let response = ui.label(icon.as_str());
-                    if let Some(tip) = tooltip {
-                        response.on_hover_text(tip);
+                    let (rect, icon_response) = ui.allocate_exact_size(
+                        egui::vec2(self.style.action_icon_size, self.style.row_height),
+                        egui::Sense::click(),
+                    );
+
+                    if ui.is_rect_visible(rect) {
+                        let visuals = ui.style().interact(&icon_response);
+                        
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            icon.as_str(),
+                            egui::FontId::proportional(self.style.action_icon_size * 0.8),
+                            visuals.text_color(),
+                        );
                     }
-                    continue;
+
+                    // Handle click for custom action
+                    let clicked = icon_response.clicked();
+                    
+                    // Add tooltip if provided (consumes the response)
+                    let _icon_response = if let Some(tip) = tooltip {
+                        icon_response.on_hover_text(tip)
+                    } else {
+                        icon_response
+                    };
+
+                    if clicked {
+                        actions.on_custom_action(&node_id, icon.as_str());
+                    }
                 }
-            };
-
-            let (rect, icon_response) = ui.allocate_exact_size(
-                egui::vec2(self.style.action_icon_size, self.style.row_height),
-                egui::Sense::click(),
-            );
-
-            if ui.is_rect_visible(rect) {
-                let visuals = ui.style().interact(&icon_response);
-                let text_color = if is_active {
-                    visuals.text_color()
-                } else {
-                    visuals.text_color().gamma_multiply(0.5)
-                };
-
-                ui.painter().text(
-                    rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    icon_text,
-                    egui::FontId::proportional(self.style.action_icon_size * 0.8),
-                    text_color,
-                );
             }
-
-            // Note: Click handling for action icons would be implemented here
-            // For now, we're just rendering them as visual indicators
         }
     }
 }
