@@ -54,8 +54,8 @@ use std::hash::Hash;
 pub trait OutlinerNode: Sized {
     /// The type used to uniquely identify nodes.
     ///
-    /// Must implement [`Hash`], [`Eq`], and [`Clone`] for use in internal state management.
-    type Id: Hash + Eq + Clone;
+    /// Must implement [`Hash`], [`Eq`], [`Clone`], [`Send`], and [`Sync`] for use in internal state management.
+    type Id: Hash + Eq + Clone + Send + Sync;
 
     /// Returns the unique identifier for this node.
     ///
