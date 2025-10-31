@@ -1,13 +1,34 @@
-//! Basic usage example for egui-arbor outliner widget.
+//! Comprehensive example demonstrating all egui-arbor features.
 //!
-//! This example demonstrates:
-//! - Creating a simple tree data structure
-//! - Implementing OutlinerNode and OutlinerActions traits
-//! - Using the Outliner widget in an eframe application
-//! - Expand/collapse functionality
-//! - Node selection
-//! - Rename functionality (double-click to edit)
-//! - Action icons (visibility, lock, selection)
+//! This example showcases:
+//! - **Tree Structure**: Creating hierarchical data with collections and entities
+//! - **OutlinerNode Trait**: Implementing the core trait for custom node types
+//! - **OutlinerActions Trait**: Handling user interactions and state management
+//! - **Action Icons**: Visibility, lock, and selection toggles with visual feedback
+//! - **Drag & Drop**: Moving nodes with Before/After/Inside positioning
+//! - **Node Selection**: Single-selection with visual highlighting
+//! - **Rename Functionality**: Double-click to edit node names inline
+//! - **Expand/Collapse**: Navigate through the tree hierarchy
+//! - **Event Logging**: Track all user interactions in real-time
+//!
+//! ## Key Features Demonstrated:
+//!
+//! ### Action Icons
+//! - **Visibility (👁)**: Toggle node visibility state
+//! - **Lock (🔒)**: Prevent node modifications
+//! - **Selection (☑)**: Quick selection toggle
+//!
+//! ### Drag & Drop Operations
+//! - **Before**: Insert dragged node before the target
+//! - **After**: Insert dragged node after the target
+//! - **Inside**: Add dragged node as a child of the target (collections only)
+//!
+//! ### Interactive Elements
+//! - Click to select nodes
+//! - Double-click to rename
+//! - Drag nodes to reorder or reparent
+//! - Click action icons for state changes
+//! - Expand/collapse collections with arrow icons
 //!
 //! To run this example:
 //! ```
@@ -17,7 +38,8 @@
 use egui_arbor::{
     ActionIcon, DropPosition, IconType, Outliner, OutlinerActions, OutlinerNode,
 };
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
+use std::time::SystemTime;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -34,7 +56,14 @@ fn main() -> eframe::Result {
     )
 }
 
-/// A simple tree node that can represent files and folders
+/// A tree node representing files and folders in a project structure.
+///
+/// This demonstrates how to create a custom node type that works with egui-arbor.
+/// The node stores:
+/// - A unique identifier for tracking and operations
+/// - A display name that can be edited
+/// - Whether it's a collection (folder) or entity (file)
+/// - Child nodes for hierarchical structure
 #[derive(Clone, Debug)]
 struct TreeNode {
     id: u64,
@@ -140,6 +169,18 @@ impl TreeNode {
     }
 }
 
+/// Implementation of OutlinerNode trait for TreeNode.
+///
+/// This trait defines how nodes are displayed and interacted with in the outliner.
+/// Each method serves a specific purpose:
+///
+/// - `id()`: Returns unique identifier for tracking and operations
+/// - `name()`: Provides the display text for the node
+/// - `is_collection()`: Determines if node can contain children
+/// - `children()`: Provides read access to child nodes
+/// - `children_mut()`: Provides write access for modifications
+/// - `icon()`: Specifies the icon to display (folder vs file)
+/// - `action_icons()`: Defines which action buttons appear for this node
 impl OutlinerNode for TreeNode {
     type Id = u64;
 
@@ -163,6 +204,8 @@ impl OutlinerNode for TreeNode {
         &mut self.children
     }
 
+    /// Returns the appropriate icon based on node type.
+    /// Collections (folders) get a folder icon, entities (files) get a file icon.
     fn icon(&self) -> Option<IconType> {
         if self.is_collection {
             Some(IconType::Collection)
@@ -171,20 +214,59 @@ impl OutlinerNode for TreeNode {
         }
     }
 
+    /// Defines which action icons are available for this node.
+    /// All nodes in this example support visibility, lock, and selection toggles.
     fn action_icons(&self) -> Vec<ActionIcon> {
         vec![
-            ActionIcon::Visibility,
-            ActionIcon::Lock,
-            ActionIcon::Selection,
+            ActionIcon::Visibility,  // Toggle visibility state
+            ActionIcon::Lock,        // Toggle lock state
+            ActionIcon::Selection,   // Quick selection toggle
         ]
     }
 }
 
-/// Actions handler for the tree
+/// Event log entry for tracking user interactions.
+#[derive(Clone, Debug)]
+struct LogEntry {
+    timestamp: SystemTime,
+    message: String,
+    event_type: EventType,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum EventType {
+    Selection,
+    Visibility,
+    Lock,
+    DragDrop,
+    Rename,
+}
+
+impl LogEntry {
+    fn new(message: String, event_type: EventType) -> Self {
+        Self {
+            timestamp: SystemTime::now(),
+            message,
+            event_type,
+        }
+    }
+}
+
+/// Actions handler that manages node state and tracks user interactions.
+///
+/// This struct demonstrates how to implement the OutlinerActions trait to:
+/// - Track which node is currently selected
+/// - Maintain visibility state for each node
+/// - Maintain lock state for each node
+/// - Log all user interactions for debugging and demonstration
+///
+/// The actions handler is the bridge between user interactions and your application state.
 struct TreeActions {
     selected: Option<u64>,
     visible: HashSet<u64>,
     locked: HashSet<u64>,
+    event_log: VecDeque<LogEntry>,
+    max_log_entries: usize,
 }
 
 impl TreeActions {
@@ -199,73 +281,170 @@ impl TreeActions {
             selected: None,
             visible,
             locked: HashSet::new(),
+            event_log: VecDeque::new(),
+            max_log_entries: 10,
+        }
+    }
+
+    /// Add an entry to the event log, maintaining the maximum size.
+    fn log_event(&mut self, message: String, event_type: EventType) {
+        self.event_log.push_front(LogEntry::new(message, event_type));
+        if self.event_log.len() > self.max_log_entries {
+            self.event_log.pop_back();
+        }
+    }
+
+    /// Get statistics about current node states.
+    fn get_stats(&self) -> NodeStats {
+        NodeStats {
+            total_nodes: 46,
+            visible_count: self.visible.len(),
+            hidden_count: 46 - self.visible.len(),
+            locked_count: self.locked.len(),
+            selected_count: if self.selected.is_some() { 1 } else { 0 },
         }
     }
 }
 
+#[derive(Debug)]
+struct NodeStats {
+    total_nodes: usize,
+    visible_count: usize,
+    hidden_count: usize,
+    locked_count: usize,
+    selected_count: usize,
+}
+
+/// Implementation of OutlinerActions trait for TreeActions.
+///
+/// This trait handles all user interactions with the outliner:
+/// - Selection changes
+/// - Visibility toggles
+/// - Lock toggles
+/// - Rename operations
+/// - Drag & drop moves
+/// - Custom actions
+///
+/// Each callback is invoked when the corresponding user action occurs,
+/// allowing you to update your application state accordingly.
 impl OutlinerActions<TreeNode> for TreeActions {
-    fn on_rename(&mut self, _id: &u64, _new_name: String) {
-        // Renaming is handled in the app's update method
-        // This callback is just for notification
+    /// Called when a node is renamed (after double-click edit).
+    /// The actual tree modification happens in the app's update method.
+    fn on_rename(&mut self, id: &u64, new_name: String) {
+        self.log_event(
+            format!("Renamed node {} to '{}'", id, new_name),
+            EventType::Rename,
+        );
     }
 
+    /// Called when a drag & drop operation is initiated.
+    /// The actual tree modification happens in the app's update method.
     fn on_move(&mut self, id: &u64, target: &u64, position: DropPosition) {
-        // Store the move operation for the app to handle
-        // We can't modify the tree directly here since we don't have access to it
-        println!("Move requested: node {} to target {} at position {:?}", id, target, position);
+        self.log_event(
+            format!("Move: node {} → target {} ({:?})", id, target, position),
+            EventType::DragDrop,
+        );
     }
 
+    /// Called when a node's selection state changes.
+    /// This example implements single-selection behavior.
     fn on_select(&mut self, id: &u64, selected: bool) {
         if selected {
             self.selected = Some(*id);
+            self.log_event(
+                format!("Selected node {}", id),
+                EventType::Selection,
+            );
         } else if self.selected == Some(*id) {
             self.selected = None;
+            self.log_event(
+                format!("Deselected node {}", id),
+                EventType::Selection,
+            );
         }
     }
 
+    /// Query whether a node is currently selected.
     fn is_selected(&self, id: &u64) -> bool {
         self.selected == Some(*id)
     }
 
+    /// Query whether a node is currently visible.
+    /// Hidden nodes are visually indicated in the UI.
     fn is_visible(&self, id: &u64) -> bool {
         self.visible.contains(id)
     }
 
+    /// Query whether a node is currently locked.
+    /// Locked nodes cannot be modified or moved.
     fn is_locked(&self, id: &u64) -> bool {
         self.locked.contains(id)
     }
 
+    /// Called when the visibility action icon is clicked.
+    /// Toggles the node between visible and hidden states.
     fn on_visibility_toggle(&mut self, id: &u64) {
-        if self.visible.contains(id) {
+        let was_visible = self.visible.contains(id);
+        if was_visible {
             self.visible.remove(id);
+            self.log_event(
+                format!("Hidden node {}", id),
+                EventType::Visibility,
+            );
         } else {
             self.visible.insert(*id);
+            self.log_event(
+                format!("Shown node {}", id),
+                EventType::Visibility,
+            );
         }
     }
 
+    /// Called when the lock action icon is clicked.
+    /// Toggles the node between locked and unlocked states.
     fn on_lock_toggle(&mut self, id: &u64) {
-        if self.locked.contains(id) {
+        let was_locked = self.locked.contains(id);
+        if was_locked {
             self.locked.remove(id);
+            self.log_event(
+                format!("Unlocked node {}", id),
+                EventType::Lock,
+            );
         } else {
             self.locked.insert(*id);
+            self.log_event(
+                format!("Locked node {}", id),
+                EventType::Lock,
+            );
         }
     }
 
+    /// Called when the selection action icon is clicked.
+    /// Provides a quick way to toggle selection without clicking the node itself.
     fn on_selection_toggle(&mut self, id: &u64) {
         let is_selected = self.is_selected(id);
         self.on_select(id, !is_selected);
     }
 
+    /// Called for custom action icons (not used in this example).
+    /// You can extend this to add your own custom actions.
     fn on_custom_action(&mut self, _id: &u64, _icon: &str) {
         // Custom actions not used in this example
     }
 }
 
-/// The main application
+/// The main application demonstrating egui-arbor features.
+///
+/// This app maintains:
+/// - The tree structure (nodes and hierarchy)
+/// - The actions handler (state and event tracking)
+/// - UI state for panels and display options
 struct ExampleApp {
     tree: Vec<TreeNode>,
     actions: TreeActions,
-    last_drop_event: Option<String>,
+    show_help: bool,
+    show_stats: bool,
+    show_log: bool,
 }
 
 impl ExampleApp {
@@ -383,32 +562,178 @@ impl ExampleApp {
         Self {
             tree,
             actions: TreeActions::new(),
-            last_drop_event: None,
+            show_help: true,
+            show_stats: true,
+            show_log: true,
         }
     }
 }
 
 impl eframe::App for ExampleApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("🌳 egui-arbor Basic Example");
-            ui.separator();
-
+        // Top panel with title and controls
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Instructions:");
-                ui.label("• Click to select");
-                ui.label("• Double-click to rename");
-                ui.label("• Click arrows to expand/collapse");
+                ui.heading("🌳 egui-arbor Comprehensive Example");
+                ui.separator();
+                
+                // Toggle buttons for panels
+                ui.checkbox(&mut self.show_help, "📖 Help");
+                ui.checkbox(&mut self.show_stats, "📊 Stats");
+                ui.checkbox(&mut self.show_log, "📋 Event Log");
             });
+        });
 
+        // Left panel with help and instructions
+        if self.show_help {
+            egui::SidePanel::left("help_panel")
+                .default_width(250.0)
+                .show(ctx, |ui| {
+                    ui.heading("📖 Instructions");
+                    ui.separator();
+                    
+                    ui.label(egui::RichText::new("Basic Interactions:").strong());
+                    ui.label("• Click to select nodes");
+                    ui.label("• Double-click to rename");
+                    ui.label("• Click ▶/▼ to expand/collapse");
+                    ui.add_space(8.0);
+                    
+                    ui.label(egui::RichText::new("Action Icons:").strong());
+                    ui.label("• 👁 Toggle visibility");
+                    ui.label("• 🔒 Toggle lock state");
+                    ui.label("• ☑ Toggle selection");
+                    ui.add_space(8.0);
+                    
+                    ui.label(egui::RichText::new("Drag & Drop:").strong());
+                    ui.label("• Drag nodes to reorder");
+                    ui.label("• Drop Before target");
+                    ui.label("• Drop After target");
+                    ui.label("• Drop Inside collections");
+                    ui.add_space(8.0);
+                    
+                    ui.label(egui::RichText::new("Visual Indicators:").strong());
+                    ui.label("• 🔵 Selected node");
+                    ui.label("• 👁‍🗨 Hidden node (dimmed)");
+                    ui.label("• 🔒 Locked node");
+                    ui.add_space(8.0);
+                    
+                    ui.label(egui::RichText::new("Tips:").strong());
+                    ui.label("• Try hiding a folder");
+                    ui.label("• Lock a node, then try to drag it");
+                    ui.label("• Drag files into folders");
+                    ui.label("• Reorder items with Before/After");
+                });
+        }
+
+        // Right panel with stats and event log
+        if self.show_stats || self.show_log {
+            egui::SidePanel::right("info_panel")
+                .default_width(300.0)
+                .show(ctx, |ui| {
+                    if self.show_stats {
+                        ui.heading("📊 Node Statistics");
+                        ui.separator();
+                        
+                        let stats = self.actions.get_stats();
+                        
+                        egui::Grid::new("stats_grid")
+                            .num_columns(2)
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Total Nodes:");
+                                ui.label(stats.total_nodes.to_string());
+                                ui.end_row();
+                                
+                                ui.label("Visible:");
+                                ui.label(format!("{} 👁", stats.visible_count));
+                                ui.end_row();
+                                
+                                ui.label("Hidden:");
+                                ui.label(format!("{} 👁‍🗨", stats.hidden_count));
+                                ui.end_row();
+                                
+                                ui.label("Locked:");
+                                ui.label(format!("{} 🔒", stats.locked_count));
+                                ui.end_row();
+                                
+                                ui.label("Selected:");
+                                ui.label(format!("{} 🔵", stats.selected_count));
+                                ui.end_row();
+                            });
+                        
+                        ui.add_space(8.0);
+                        
+                        if let Some(selected_id) = self.actions.selected {
+                            ui.label(egui::RichText::new(format!("Selected Node ID: {}", selected_id))
+                                .color(egui::Color32::from_rgb(100, 150, 255)));
+                        } else {
+                            ui.label(egui::RichText::new("No node selected")
+                                .color(egui::Color32::GRAY));
+                        }
+                        
+                        ui.separator();
+                    }
+                    
+                    if self.show_log {
+                        ui.heading("📋 Event Log");
+                        ui.separator();
+                        
+                        egui::ScrollArea::vertical()
+                            .max_height(400.0)
+                            .show(ui, |ui| {
+                                if self.actions.event_log.is_empty() {
+                                    ui.label(egui::RichText::new("No events yet...")
+                                        .italics()
+                                        .color(egui::Color32::GRAY));
+                                } else {
+                                    for entry in &self.actions.event_log {
+                                        let color = match entry.event_type {
+                                            EventType::Selection => egui::Color32::from_rgb(100, 150, 255),
+                                            EventType::Visibility => egui::Color32::from_rgb(255, 200, 100),
+                                            EventType::Lock => egui::Color32::from_rgb(255, 150, 150),
+                                            EventType::DragDrop => egui::Color32::from_rgb(150, 255, 150),
+                                            EventType::Rename => egui::Color32::from_rgb(200, 150, 255),
+                                        };
+                                        
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new("•").color(color));
+                                            
+                                            // Format timestamp for display
+                                            if let Ok(duration) = entry.timestamp.elapsed() {
+                                                let secs = duration.as_secs();
+                                                let time_str = if secs < 60 {
+                                                    format!("{}s ago", secs)
+                                                } else {
+                                                    format!("{}m ago", secs / 60)
+                                                };
+                                                ui.label(egui::RichText::new(time_str)
+                                                    .small()
+                                                    .color(egui::Color32::GRAY));
+                                            }
+                                            
+                                            ui.label(&entry.message);
+                                        });
+                                    }
+                                }
+                            });
+                    }
+                });
+        }
+
+        // Central panel with the outliner
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Tree Structure");
             ui.separator();
-
-            // Show the outliner
-            let response = Outliner::new("example_outliner").show(ui, &self.tree, &mut self.actions);
+            
+            // Show the outliner widget
+            let response = Outliner::new("example_outliner")
+                .show(ui, &self.tree, &mut self.actions);
 
             // Handle rename events
+            // When a user double-clicks and edits a node name, this callback fires
             if let Some((id, new_name)) = response.renamed() {
-                // Update the node name in the tree
+                // Update the node name in the tree structure
                 for root in &mut self.tree {
                     if root.rename_node(*id, new_name.to_string()) {
                         break;
@@ -417,12 +742,13 @@ impl eframe::App for ExampleApp {
             }
 
             // Handle drag-drop events
+            // When a user drags a node and drops it on a target, this callback fires
             if let Some(drop_event) = response.drop_event() {
                 let source_id = &drop_event.source;
                 let target_id = &drop_event.target;
                 let position = drop_event.position;
 
-                // Remove the source node from the tree
+                // Step 1: Remove the source node from its current location
                 let mut removed_node = None;
                 for root in &mut self.tree {
                     if let Some(node) = root.remove_node(*source_id) {
@@ -431,7 +757,7 @@ impl eframe::App for ExampleApp {
                     }
                 }
 
-                // Insert the node at the target position
+                // Step 2: Insert the node at the target position
                 if let Some(node) = removed_node {
                     let mut inserted = false;
                     for root in &mut self.tree {
@@ -442,45 +768,41 @@ impl eframe::App for ExampleApp {
                     }
                     
                     if inserted {
-                        self.last_drop_event = Some(format!(
-                            "Moved node {} to target {} ({:?})",
-                            source_id, target_id, position
-                        ));
+                        self.actions.log_event(
+                            format!("✓ Successfully moved node {} to target {} ({:?})",
+                                source_id, target_id, position),
+                            EventType::DragDrop,
+                        );
+                    } else {
+                        self.actions.log_event(
+                            format!("✗ Failed to move node {} to target {}",
+                                source_id, target_id),
+                            EventType::DragDrop,
+                        );
                     }
                 }
             }
 
             ui.separator();
-
-            // Display information about the current state
+            
+            // Status bar showing current frame state
             ui.horizontal(|ui| {
-                ui.label("Status:");
+                if response.changed() {
+                    ui.label(egui::RichText::new("✓ State changed this frame")
+                        .color(egui::Color32::from_rgb(100, 255, 100)));
+                }
                 
-                if let Some(selected_id) = self.actions.selected {
-                    ui.label(format!("Selected node ID: {}", selected_id));
-                } else {
-                    ui.label("No node selected");
+                // Show additional event information
+                if let Some(id) = response.double_clicked() {
+                    ui.separator();
+                    ui.label(format!("Double-clicked: {}", id));
                 }
 
-                ui.separator();
-
-                if response.changed() {
-                    ui.label("✓ State changed this frame");
+                if let Some(id) = response.context_menu() {
+                    ui.separator();
+                    ui.label(format!("Context menu: {}", id));
                 }
             });
-
-            // Show event information
-            if let Some(id) = response.double_clicked() {
-                ui.label(format!("Double-clicked node: {}", id));
-            }
-
-            if let Some(id) = response.context_menu() {
-                ui.label(format!("Context menu requested for node: {}", id));
-            }
-
-            if let Some(ref event) = self.last_drop_event {
-                ui.label(format!("Last drop: {}", event));
-            }
         });
     }
 }
