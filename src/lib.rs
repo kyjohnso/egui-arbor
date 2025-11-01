@@ -14,6 +14,8 @@
 //! - **Customizable Styling**: Configure indentation, colors, icons, and spacing
 //! - **Trait-Based Integration**: Works with any data structure implementing [`OutlinerNode`]
 //! - **State Persistence**: Automatic state management via egui's memory system
+//! - **Tree Operations**: Built-in helpers for common tree manipulations (rename, remove, insert)
+//! - **Default Actions**: Ready-to-use [`OutlinerActions`] implementation with event logging
 //!
 //! # Multi-Selection
 //!
@@ -28,13 +30,14 @@
 //!
 //! To use the outliner, you need to:
 //! 1. Implement [`OutlinerNode`] on your data structure
-//! 2. Implement [`OutlinerActions`] to handle user interactions
-//! 3. Create an [`Outliner`] and call its [`show`](Outliner::show) method
+//! 2. Optionally implement [`tree_ops::TreeOperations`] for tree manipulation helpers
+//! 3. Use [`default_actions::DefaultActions`] or implement [`OutlinerActions`] yourself
+//! 4. Create an [`Outliner`] and call its [`show`](Outliner::show) method
 //!
 //! # Example
 //!
 //! ```rust
-//! use egui_arbor::{Outliner, OutlinerNode, OutlinerActions, ActionIcon, DropPosition};
+//! use egui_arbor::{Outliner, OutlinerNode, tree_ops::TreeOperations, default_actions::DefaultActions};
 //!
 //! // 1. Define your data structure
 //! #[derive(Clone)]
@@ -55,33 +58,11 @@
 //!     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
 //! }
 //!
-//! // 3. Implement OutlinerActions trait
-//! struct MyActions {
-//!     selected: Option<u64>,
-//! }
+//! // 3. Get tree operations for free!
+//! impl TreeOperations for TreeNode {}
 //!
-//! impl OutlinerActions<TreeNode> for MyActions {
-//!     fn on_select(&mut self, id: &u64, selected: bool) {
-//!         self.selected = if selected { Some(*id) } else { None };
-//!     }
-//!
-//!     fn is_selected(&self, id: &u64) -> bool {
-//!         self.selected == Some(*id)
-//!     }
-//!
-//!     // Implement other required methods...
-//!     fn on_rename(&mut self, _id: &u64, _new_name: String) {}
-//!     fn on_move(&mut self, _id: &u64, _target: &u64, _position: DropPosition) {}
-//!     fn is_visible(&self, _id: &u64) -> bool { true }
-//!     fn is_locked(&self, _id: &u64) -> bool { false }
-//!     fn on_visibility_toggle(&mut self, _id: &u64) {}
-//!     fn on_lock_toggle(&mut self, _id: &u64) {}
-//!     fn on_selection_toggle(&mut self, _id: &u64) {}
-//!     fn on_custom_action(&mut self, _id: &u64, _icon: &str) {}
-//! }
-//!
-//! // 4. Use in your egui code
-//! fn show_tree(ui: &mut egui::Ui, nodes: &[TreeNode], actions: &mut MyActions) {
+//! // 4. Use in your egui code with default actions
+//! fn show_tree(ui: &mut egui::Ui, nodes: &[TreeNode], actions: &mut DefaultActions<u64>) {
 //!     let response = Outliner::new("my_tree")
 //!         .show(ui, nodes, actions);
 //!
@@ -102,16 +83,25 @@
 //! - [`Style`] - Visual styling configuration
 //! - [`DragDropState`] - State tracking for drag-drop operations
 //!
+//! # Helper Modules
+//!
+//! - [`tree_ops`] - Tree manipulation operations (rename, remove, insert)
+//! - [`default_actions`] - Ready-to-use actions implementation with state tracking
+//! - [`event_log`] - Event logging system for tracking user interactions
+//!
 //! # Optional Features
 //!
 //! - `serde` - Enable serialization support for state persistence
 
+pub mod default_actions;
 pub mod drag_drop;
+pub mod event_log;
 pub mod outliner;
 pub mod response;
 pub mod state;
 pub mod style;
 pub mod traits;
+pub mod tree_ops;
 
 // Re-export main types for convenience
 pub use drag_drop::{DragDropState, DragDropVisuals};
