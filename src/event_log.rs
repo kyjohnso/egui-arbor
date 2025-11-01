@@ -298,7 +298,7 @@ impl<Id> EventLog<Id> {
     /// ```
     /// use egui_arbor::event_log::{EventLog, EventType};
     ///
-    /// let mut log = EventLog::new(10);
+    /// let mut log = EventLog::<u64>::new(10);
     /// assert_eq!(log.len(), 0);
     ///
     /// log.log("Event", EventType::Selection, None);
@@ -329,7 +329,7 @@ impl<Id> EventLog<Id> {
     /// ```
     /// use egui_arbor::event_log::{EventLog, EventType};
     ///
-    /// let mut log = EventLog::new(10);
+    /// let mut log = EventLog::<u64>::new(10);
     /// log.log("Event", EventType::Selection, None);
     /// assert!(!log.is_empty());
     ///

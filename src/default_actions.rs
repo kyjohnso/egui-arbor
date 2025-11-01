@@ -44,24 +44,44 @@ use std::hash::Hash;
 ///
 /// ```
 /// use egui_arbor::default_actions::DefaultActions;
+/// use egui_arbor::OutlinerActions;
 ///
+/// # struct TestNode { children: Vec<TestNode> }
+/// # impl egui_arbor::OutlinerNode for TestNode {
+/// #     type Id = u64;
+/// #     fn id(&self) -> Self::Id { 0 }
+/// #     fn name(&self) -> &str { "" }
+/// #     fn is_collection(&self) -> bool { false }
+/// #     fn children(&self) -> &[Self] { &self.children }
+/// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+/// # }
 /// let mut actions = DefaultActions::<u64>::new();
 ///
 /// // All nodes start unselected, visible, and unlocked
-/// assert!(!actions.is_selected(&1));
-/// assert!(!actions.is_visible(&1));
-/// assert!(!actions.is_locked(&1));
+/// assert!(!OutlinerActions::<TestNode>::is_selected(&actions, &1));
+/// assert!(!OutlinerActions::<TestNode>::is_visible(&actions, &1));
+/// assert!(!OutlinerActions::<TestNode>::is_locked(&actions, &1));
 /// ```
 ///
 /// ## With Event Logging
 ///
 /// ```
 /// use egui_arbor::default_actions::DefaultActions;
+/// use egui_arbor::OutlinerActions;
 ///
+/// # struct TestNode { children: Vec<TestNode> }
+/// # impl egui_arbor::OutlinerNode for TestNode {
+/// #     type Id = u64;
+/// #     fn id(&self) -> Self::Id { 0 }
+/// #     fn name(&self) -> &str { "" }
+/// #     fn is_collection(&self) -> bool { false }
+/// #     fn children(&self) -> &[Self] { &self.children }
+/// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+/// # }
 /// let mut actions = DefaultActions::<u64>::with_logging(50);
 ///
 /// // Events are automatically logged
-/// actions.on_select(&1, true);
+/// OutlinerActions::<TestNode>::on_select(&mut actions, &1, true);
 /// assert_eq!(actions.event_log().unwrap().len(), 1);
 /// ```
 ///
@@ -69,15 +89,25 @@ use std::hash::Hash;
 ///
 /// ```
 /// use egui_arbor::default_actions::DefaultActions;
+/// use egui_arbor::OutlinerActions;
 /// use std::collections::HashSet;
 ///
+/// # struct TestNode { children: Vec<TestNode> }
+/// # impl egui_arbor::OutlinerNode for TestNode {
+/// #     type Id = u64;
+/// #     fn id(&self) -> Self::Id { 0 }
+/// #     fn name(&self) -> &str { "" }
+/// #     fn is_collection(&self) -> bool { false }
+/// #     fn children(&self) -> &[Self] { &self.children }
+/// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+/// # }
 /// let mut actions = DefaultActions::<u64>::new();
 ///
 /// // Make all nodes visible by default
 /// let visible_ids: HashSet<_> = (0..10).collect();
 /// actions.set_all_visible(visible_ids);
 ///
-/// assert!(actions.is_visible(&5));
+/// assert!(OutlinerActions::<TestNode>::is_visible(&actions, &5));
 /// ```
 #[derive(Clone, Debug)]
 pub struct DefaultActions<Id>
@@ -182,10 +212,20 @@ where
     ///
     /// ```
     /// use egui_arbor::default_actions::DefaultActions;
+    /// use egui_arbor::OutlinerActions;
     ///
+    /// # struct TestNode { children: Vec<TestNode> }
+    /// # impl egui_arbor::OutlinerNode for TestNode {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> Self::Id { 0 }
+    /// #     fn name(&self) -> &str { "" }
+    /// #     fn is_collection(&self) -> bool { false }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+    /// # }
     /// let mut actions = DefaultActions::<u64>::new();
-    /// actions.on_select(&1, true);
-    /// actions.on_select(&2, true);
+    /// OutlinerActions::<TestNode>::on_select(&mut actions, &1, true);
+    /// OutlinerActions::<TestNode>::on_select(&mut actions, &2, true);
     /// assert_eq!(actions.selected_count(), 2);
     /// ```
     pub fn selected_count(&self) -> usize {
@@ -198,9 +238,19 @@ where
     ///
     /// ```
     /// use egui_arbor::default_actions::DefaultActions;
+    /// use egui_arbor::OutlinerActions;
     ///
+    /// # struct TestNode { children: Vec<TestNode> }
+    /// # impl egui_arbor::OutlinerNode for TestNode {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> Self::Id { 0 }
+    /// #     fn name(&self) -> &str { "" }
+    /// #     fn is_collection(&self) -> bool { false }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+    /// # }
     /// let mut actions = DefaultActions::<u64>::new();
-    /// actions.on_visibility_toggle(&1);
+    /// OutlinerActions::<TestNode>::on_visibility_toggle(&mut actions, &1);
     /// assert_eq!(actions.visible_count(), 1);
     /// ```
     pub fn visible_count(&self) -> usize {
@@ -213,9 +263,19 @@ where
     ///
     /// ```
     /// use egui_arbor::default_actions::DefaultActions;
+    /// use egui_arbor::OutlinerActions;
     ///
+    /// # struct TestNode { children: Vec<TestNode> }
+    /// # impl egui_arbor::OutlinerNode for TestNode {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> Self::Id { 0 }
+    /// #     fn name(&self) -> &str { "" }
+    /// #     fn is_collection(&self) -> bool { false }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+    /// # }
     /// let mut actions = DefaultActions::<u64>::new();
-    /// actions.on_lock_toggle(&1);
+    /// OutlinerActions::<TestNode>::on_lock_toggle(&mut actions, &1);
     /// assert_eq!(actions.locked_count(), 1);
     /// ```
     pub fn locked_count(&self) -> usize {
@@ -228,10 +288,20 @@ where
     ///
     /// ```
     /// use egui_arbor::default_actions::DefaultActions;
+    /// use egui_arbor::OutlinerActions;
     ///
+    /// # struct TestNode { children: Vec<TestNode> }
+    /// # impl egui_arbor::OutlinerNode for TestNode {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> Self::Id { 0 }
+    /// #     fn name(&self) -> &str { "" }
+    /// #     fn is_collection(&self) -> bool { false }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+    /// # }
     /// let mut actions = DefaultActions::<u64>::new();
-    /// actions.on_select(&1, true);
-    /// actions.on_select(&2, true);
+    /// OutlinerActions::<TestNode>::on_select(&mut actions, &1, true);
+    /// OutlinerActions::<TestNode>::on_select(&mut actions, &2, true);
     ///
     /// assert!(actions.selected().contains(&1));
     /// assert!(actions.selected().contains(&2));
@@ -260,13 +330,23 @@ where
     ///
     /// ```
     /// use egui_arbor::default_actions::DefaultActions;
+    /// use egui_arbor::OutlinerActions;
     /// use std::collections::HashSet;
     ///
+    /// # struct TestNode { children: Vec<TestNode> }
+    /// # impl egui_arbor::OutlinerNode for TestNode {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> Self::Id { 0 }
+    /// #     fn name(&self) -> &str { "" }
+    /// #     fn is_collection(&self) -> bool { false }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+    /// # }
     /// let mut actions = DefaultActions::<u64>::new();
     /// let visible: HashSet<_> = (0..10).collect();
     /// actions.set_all_visible(visible);
     ///
-    /// assert!(actions.is_visible(&5));
+    /// assert!(OutlinerActions::<TestNode>::is_visible(&actions, &5));
     /// ```
     pub fn set_all_visible(&mut self, ids: HashSet<Id>) {
         self.visible = ids;
@@ -278,10 +358,20 @@ where
     ///
     /// ```
     /// use egui_arbor::default_actions::DefaultActions;
+    /// use egui_arbor::OutlinerActions;
     ///
+    /// # struct TestNode { children: Vec<TestNode> }
+    /// # impl egui_arbor::OutlinerNode for TestNode {
+    /// #     type Id = u64;
+    /// #     fn id(&self) -> Self::Id { 0 }
+    /// #     fn name(&self) -> &str { "" }
+    /// #     fn is_collection(&self) -> bool { false }
+    /// #     fn children(&self) -> &[Self] { &self.children }
+    /// #     fn children_mut(&mut self) -> &mut Vec<Self> { &mut self.children }
+    /// # }
     /// let mut actions = DefaultActions::<u64>::new();
-    /// actions.on_select(&1, true);
-    /// actions.on_select(&2, true);
+    /// OutlinerActions::<TestNode>::on_select(&mut actions, &1, true);
+    /// OutlinerActions::<TestNode>::on_select(&mut actions, &2, true);
     /// assert_eq!(actions.selected_count(), 2);
     ///
     /// actions.clear_selection();
