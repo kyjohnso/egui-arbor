@@ -52,8 +52,53 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "egui-arbor Example",
         options,
-        Box::new(|_cc| Ok(Box::new(ExampleApp::new()))),
+        Box::new(|cc| {
+            // Load fonts with better Unicode support for triangle characters
+            let mut fonts = egui::FontDefinitions::default();
+            
+            // Try to load system fonts with good Unicode coverage
+            let font_loaded = load_unicode_font(&mut fonts);
+            
+            if font_loaded {
+                cc.egui_ctx.set_fonts(fonts);
+            }
+            
+            Ok(Box::new(ExampleApp::new()))
+        }),
     )
+}
+
+/// Attempts to load a system font with good Unicode coverage.
+/// Returns true if a font was successfully loaded.
+fn load_unicode_font(fonts: &mut egui::FontDefinitions) -> bool {
+    // Try different font paths based on the operating system
+    let font_paths = [
+        // macOS
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        // Windows
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "C:\\Windows\\Fonts\\segoeui.ttf",
+        // Linux (common paths)
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ];
+    
+    for font_path in &font_paths {
+        if let Ok(font_data) = std::fs::read(font_path) {
+            fonts.font_data.insert(
+                "unicode_font".to_owned(),
+                egui::FontData::from_owned(font_data),
+            );
+            fonts.families.get_mut(&egui::FontFamily::Proportional)
+                .unwrap()
+                .insert(0, "unicode_font".to_owned());
+            return true;
+        }
+    }
+    
+    false
 }
 
 /// A tree node representing files and folders in a project structure.
