@@ -78,6 +78,11 @@ where
     /// This indicates the user began dragging a node.
     pub drag_started: Option<Id>,
 
+    /// IDs of all nodes being dragged (includes the primary drag node and any selected nodes).
+    ///
+    /// When dragging with multiple selections, this contains all selected node IDs.
+    pub dragging_nodes: Vec<Id>,
+
     /// Details of a drop event that occurred this frame, if any.
     ///
     /// This contains information about the source node, target node, and drop position.
@@ -111,6 +116,7 @@ where
             context_menu: None,
             renamed: None,
             drag_started: None,
+            dragging_nodes: Vec::new(),
             drop_event: None,
         }
     }
@@ -199,6 +205,22 @@ where
     #[inline]
     pub fn drag_started(&self) -> Option<&Id> {
         self.drag_started.as_ref()
+    }
+
+    /// Returns the IDs of all nodes being dragged (primary + selected nodes).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// if !response.dragging_nodes().is_empty() {
+    ///     for id in response.dragging_nodes() {
+    ///         highlight_dragging_node(id);
+    ///     }
+    /// }
+    /// ```
+    #[inline]
+    pub fn dragging_nodes(&self) -> &[Id] {
+        &self.dragging_nodes
     }
 
     /// Returns details of a drop event that occurred this frame, if any.

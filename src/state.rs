@@ -93,6 +93,13 @@ where
     /// This field is not persisted across frames (it's transient state).
     #[cfg_attr(feature = "serde", serde(skip))]
     box_selection: Option<BoxSelectionState>,
+
+    /// IDs of all nodes being dragged in a multi-drag operation.
+    ///
+    /// This is set when a drag starts and includes all selected nodes.
+    /// This field is not persisted across frames (it's transient state).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dragging_nodes: Vec<Id>,
 }
 
 impl<Id> Default for OutlinerState<Id>
@@ -107,6 +114,7 @@ where
             drag_drop: DragDropState::new(),
             last_selected: None,
             box_selection: None,
+            dragging_nodes: Vec::new(),
         }
     }
 }
@@ -359,6 +367,21 @@ where
     /// Ends the current box selection operation.
     pub fn end_box_selection(&mut self) {
         self.box_selection = None;
+    }
+
+    /// Sets the nodes being dragged in a multi-drag operation.
+    pub fn set_dragging_nodes(&mut self, nodes: Vec<Id>) {
+        self.dragging_nodes = nodes;
+    }
+
+    /// Returns the nodes being dragged in a multi-drag operation.
+    pub fn dragging_nodes(&self) -> &[Id] {
+        &self.dragging_nodes
+    }
+
+    /// Clears the dragging nodes list.
+    pub fn clear_dragging_nodes(&mut self) {
+        self.dragging_nodes.clear();
     }
 }
 

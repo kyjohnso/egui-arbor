@@ -752,39 +752,48 @@ impl eframe::App for ExampleApp {
             // Handle drag-drop events
             // When a user drags a node and drops it on a target, this callback fires
             if let Some(drop_event) = response.drop_event() {
-                let source_id = &drop_event.source;
                 let target_id = &drop_event.target;
                 let position = drop_event.position;
 
-                // Step 1: Remove the source node from its current location
-                let mut removed_node = None;
-                for root in &mut self.tree {
-                    if let Some(node) = root.remove_node(*source_id) {
-                        removed_node = Some(node);
-                        break;
+                // Get all nodes being dragged (primary + selected)
+                let dragging_ids = response.dragging_nodes();
+                
+                if !dragging_ids.is_empty() {
+                    // Step 1: Remove all dragging nodes from their current locations
+                    let mut removed_nodes = Vec::new();
+                    for drag_id in dragging_ids {
+                        for root in &mut self.tree {
+                            if let Some(node) = root.remove_node(*drag_id) {
+                                removed_nodes.push(node);
+                                break;
+                            }
+                        }
                     }
-                }
 
-                // Step 2: Insert the node at the target position
-                if let Some(node) = removed_node {
-                    let mut inserted = false;
-                    for root in &mut self.tree {
-                        if root.insert_node(*target_id, node.clone(), position) {
-                            inserted = true;
-                            break;
+                    // Step 2: Insert all nodes at the target position
+                    let mut all_inserted = true;
+                    for node in removed_nodes {
+                        let mut inserted = false;
+                        for root in &mut self.tree {
+                            if root.insert_node(*target_id, node.clone(), position) {
+                                inserted = true;
+                                break;
+                            }
+                        }
+                        if !inserted {
+                            all_inserted = false;
                         }
                     }
                     
-                    if inserted {
+                    if all_inserted {
                         self.actions.log_event(
-                            format!("✓ Successfully moved node {} to target {} ({:?})",
-                                source_id, target_id, position),
+                            format!("✓ Successfully moved {} node(s) to target {} ({:?})",
+                                dragging_ids.len(), target_id, position),
                             EventType::DragDrop,
                         );
                     } else {
                         self.actions.log_event(
-                            format!("✗ Failed to move node {} to target {}",
-                                source_id, target_id),
+                            format!("✗ Failed to move some nodes to target {}", target_id),
                             EventType::DragDrop,
                         );
                     }

@@ -160,6 +160,12 @@ impl Outliner {
                 // Track node rectangles for box selection
                 let mut node_rects: Vec<(N::Id, egui::Rect)> = Vec::new();
 
+                // Collect all currently selected nodes for potential multi-drag
+                let selected_nodes: Vec<N::Id> = visible_nodes.iter()
+                    .filter(|id| actions.is_selected(id))
+                    .cloned()
+                    .collect();
+
                 // Create the outliner response wrapper
                 let mut outliner_response = OutlinerResponse::new(
                     ui.allocate_response(egui::vec2(ui.available_width(), 0.0), egui::Sense::hover())
@@ -167,7 +173,7 @@ impl Outliner {
 
                 // Render all root nodes
                 for node in nodes {
-                    self.render_node(ui, node, 0, nodes, &mut state, actions, &mut outliner_response, &visible_nodes, &mut node_rects);
+                    self.render_node(ui, node, 0, nodes, &mut state, actions, &mut outliner_response, &visible_nodes, &mut node_rects, &selected_nodes);
                 }
 
                 // Handle box selection in the background
@@ -286,6 +292,7 @@ impl Outliner {
         response: &mut OutlinerResponse<N::Id>,
         visible_nodes: &[N::Id],
         node_rects: &mut Vec<(N::Id, egui::Rect)>,
+        selected_nodes: &[N::Id],
     ) where
         N: OutlinerNode,
         A: OutlinerActions<N>,
@@ -426,6 +433,18 @@ impl Outliner {
             if drag_response.drag_started() {
                 state.drag_drop_mut().start_drag(node_id.clone());
                 response.drag_started = Some(node_id.clone());
+                
+                // Collect all selected nodes for multi-drag
+                // If the dragged node is selected, include all selected nodes
+                // Otherwise, just drag this single node
+                let dragging_nodes = if actions.is_selected(&node_id) {
+                    selected_nodes.to_vec()
+                } else {
+                    vec![node_id.clone()]
+                };
+                
+                state.set_dragging_nodes(dragging_nodes.clone());
+                response.dragging_nodes = dragging_nodes;
                 response.changed = true;
             }
 
@@ -465,11 +484,18 @@ impl Outliner {
                     // Invoke the on_move callback
                     actions.on_move(&source_id, &target_id, position);
                     
+                    // Get the dragging nodes and add them to the response
+                    response.dragging_nodes = state.dragging_nodes().to_vec();
+                    
                     // Record the drop event in the response
                     response.drop_event = Some(DropEvent::new(source_id, target_id, position));
                     response.changed = true;
+                    
+                    // Clear dragging nodes after drop
+                    state.clear_dragging_nodes();
                 } else {
                     state.drag_drop_mut().cancel_drag();
+                    state.clear_dragging_nodes();
                 }
             }
         }
@@ -494,7 +520,7 @@ impl Outliner {
         // Render children if this is an expanded collection
         if is_collection && is_expanded {
             for child in node.children() {
-                self.render_node(ui, child, depth + 1, all_nodes, state, actions, response, visible_nodes, node_rects);
+                self.render_node(ui, child, depth + 1, all_nodes, state, actions, response, visible_nodes, node_rects, selected_nodes);
             }
         }
     }
