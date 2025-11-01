@@ -255,14 +255,14 @@ impl LogEntry {
 /// Actions handler that manages node state and tracks user interactions.
 ///
 /// This struct demonstrates how to implement the OutlinerActions trait to:
-/// - Track which node is currently selected
+/// - Track which nodes are currently selected (supports multi-selection)
 /// - Maintain visibility state for each node
 /// - Maintain lock state for each node
 /// - Log all user interactions for debugging and demonstration
 ///
 /// The actions handler is the bridge between user interactions and your application state.
 struct TreeActions {
-    selected: Option<u64>,
+    selected: HashSet<u64>,
     visible: HashSet<u64>,
     locked: HashSet<u64>,
     event_log: VecDeque<LogEntry>,
@@ -278,7 +278,7 @@ impl TreeActions {
         }
 
         Self {
-            selected: None,
+            selected: HashSet::new(),
             visible,
             locked: HashSet::new(),
             event_log: VecDeque::new(),
@@ -301,7 +301,7 @@ impl TreeActions {
             visible_count: self.visible.len(),
             hidden_count: 46 - self.visible.len(),
             locked_count: self.locked.len(),
-            selected_count: if self.selected.is_some() { 1 } else { 0 },
+            selected_count: self.selected.len(),
         }
     }
 }
@@ -347,16 +347,16 @@ impl OutlinerActions<TreeNode> for TreeActions {
     }
 
     /// Called when a node's selection state changes.
-    /// This example implements single-selection behavior.
+    /// This example implements multi-selection behavior.
     fn on_select(&mut self, id: &u64, selected: bool) {
         if selected {
-            self.selected = Some(*id);
+            self.selected.insert(*id);
             self.log_event(
                 format!("Selected node {}", id),
                 EventType::Selection,
             );
-        } else if self.selected == Some(*id) {
-            self.selected = None;
+        } else {
+            self.selected.remove(id);
             self.log_event(
                 format!("Deselected node {}", id),
                 EventType::Selection,
@@ -366,7 +366,7 @@ impl OutlinerActions<TreeNode> for TreeActions {
 
     /// Query whether a node is currently selected.
     fn is_selected(&self, id: &u64) -> bool {
-        self.selected == Some(*id)
+        self.selected.contains(id)
     }
 
     /// Query whether a node is currently visible.
@@ -664,11 +664,19 @@ impl eframe::App for ExampleApp {
                         
                         ui.add_space(8.0);
                         
-                        if let Some(selected_id) = self.actions.selected {
-                            ui.label(egui::RichText::new(format!("Selected Node ID: {}", selected_id))
+                        if !self.actions.selected.is_empty() {
+                            ui.label(egui::RichText::new("Selected Node IDs:")
                                 .color(egui::Color32::from_rgb(100, 150, 255)));
+                            let mut selected_ids: Vec<_> = self.actions.selected.iter().collect();
+                            selected_ids.sort();
+                            for id in selected_ids.iter().take(5) {
+                                ui.label(format!("  • {}", id));
+                            }
+                            if selected_ids.len() > 5 {
+                                ui.label(format!("  ... and {} more", selected_ids.len() - 5));
+                            }
                         } else {
-                            ui.label(egui::RichText::new("No node selected")
+                            ui.label(egui::RichText::new("No nodes selected")
                                 .color(egui::Color32::GRAY));
                         }
                         

@@ -8,6 +8,27 @@ use crate::drag_drop::DragDropState;
 use std::collections::HashSet;
 use std::hash::Hash;
 
+/// State for box selection operations.
+///
+/// Tracks the start position and whether a box selection is currently active.
+#[derive(Clone, Debug)]
+pub struct BoxSelectionState {
+    /// The starting position of the box selection in screen coordinates.
+    pub start_pos: egui::Pos2,
+    /// Whether the box selection is currently active.
+    pub active: bool,
+}
+
+impl BoxSelectionState {
+    /// Creates a new box selection state.
+    pub fn new(start_pos: egui::Pos2) -> Self {
+        Self {
+            start_pos,
+            active: true,
+        }
+    }
+}
+
 /// State for an outliner widget instance.
 ///
 /// This struct tracks which collection nodes are expanded and which node (if any)
@@ -58,6 +79,20 @@ where
     /// This field is not persisted across frames (it's transient state).
     #[cfg_attr(feature = "serde", serde(skip))]
     drag_drop: DragDropState<Id>,
+
+    /// The ID of the last selected node for shift-click range selection.
+    ///
+    /// This is used to determine the range when shift-clicking.
+    /// This field is not persisted across frames (it's transient state).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    last_selected: Option<Id>,
+
+    /// State for box selection.
+    ///
+    /// Tracks the start position and current state of a box selection operation.
+    /// This field is not persisted across frames (it's transient state).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    box_selection: Option<BoxSelectionState>,
 }
 
 impl<Id> Default for OutlinerState<Id>
@@ -70,6 +105,8 @@ where
             expanded: HashSet::new(),
             editing: None,
             drag_drop: DragDropState::new(),
+            last_selected: None,
+            box_selection: None,
         }
     }
 }
@@ -286,6 +323,42 @@ where
     /// ```
     pub fn drag_drop_mut(&mut self) -> &mut DragDropState<Id> {
         &mut self.drag_drop
+    }
+
+    /// Sets the last selected node for shift-click range selection.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The ID of the last selected node
+    pub fn set_last_selected(&mut self, id: Option<Id>) {
+        self.last_selected = id;
+    }
+
+    /// Returns the ID of the last selected node, if any.
+    pub fn last_selected(&self) -> Option<&Id> {
+        self.last_selected.as_ref()
+    }
+
+    /// Starts a box selection operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `start_pos` - The starting position in screen coordinates
+    pub fn start_box_selection(&mut self, start_pos: egui::Pos2) {
+        self.box_selection = Some(BoxSelectionState {
+            start_pos,
+            active: true,
+        });
+    }
+
+    /// Returns the current box selection state, if any.
+    pub fn box_selection(&self) -> Option<&BoxSelectionState> {
+        self.box_selection.as_ref()
+    }
+
+    /// Ends the current box selection operation.
+    pub fn end_box_selection(&mut self) {
+        self.box_selection = None;
     }
 }
 

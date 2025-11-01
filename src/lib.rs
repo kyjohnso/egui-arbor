@@ -10,10 +10,19 @@
 //! - **Drag & Drop**: Reorder and reparent nodes with Before/After/Inside positioning
 //! - **Action Icons**: Built-in visibility, lock, and selection toggles with custom icon support
 //! - **Inline Editing**: Double-click to rename nodes with keyboard shortcuts
-//! - **Node Selection**: Single or multi-selection with visual highlighting
+//! - **Multi-Selection**: Select multiple nodes with Shift-click, Ctrl/Cmd-click, or box selection
 //! - **Customizable Styling**: Configure indentation, colors, icons, and spacing
 //! - **Trait-Based Integration**: Works with any data structure implementing [`OutlinerNode`]
 //! - **State Persistence**: Automatic state management via egui's memory system
+//!
+//! # Multi-Selection
+//!
+//! The outliner supports multiple selection modes:
+//! - **Click**: Select a single node (clears other selections)
+//! - **Ctrl/Cmd-Click**: Toggle selection of a node without clearing others
+//! - **Shift-Click**: Select a range of nodes from the last selected to the clicked node
+//! - **Box Selection**: Click and drag in empty space to select multiple nodes with a selection box
+//!   - Hold Ctrl/Cmd while box selecting to add to existing selection
 //!
 //! # Quick Start
 //!
@@ -108,6 +117,6 @@ pub mod traits;
 pub use drag_drop::{DragDropState, DragDropVisuals};
 pub use outliner::Outliner;
 pub use response::{DropEvent, OutlinerResponse};
-pub use state::OutlinerState;
+pub use state::{BoxSelectionState, OutlinerState};
 pub use style::{ExpandIconStyle, Style};
 pub use traits::{ActionIcon, DropPosition, IconType, OutlinerActions, OutlinerNode};
