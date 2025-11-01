@@ -207,7 +207,11 @@ impl Outliner {
         let drop_position = state.drag_drop().current_drop_position();
 
         // Start horizontal layout for this row
-        let row_response = ui.horizontal(|ui| {
+        let row_output = ui.horizontal(|ui| {
+            // Calculate space needed for action icons upfront
+            let num_action_icons = node.action_icons().len();
+            let icons_width = num_action_icons as f32 * (self.style.action_icon_size + self.style.icon_spacing);
+            
             // Add indentation
             ui.add_space(depth as f32 * self.style.indent);
 
@@ -235,6 +239,7 @@ impl Outliner {
                 node,
                 is_editing,
                 is_selected,
+                icons_width,
                 state,
                 actions,
                 response,
@@ -264,15 +269,16 @@ impl Outliner {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.render_action_icons(ui, node, actions);
             });
+
+            // Return the label response so we can use it for drag detection
+            label_response
         });
 
-        let row_rect = row_response.response.rect;
+        let row_rect = row_output.response.rect;
+        let label_response = row_output.inner;
 
-        // Create a drag-sense response for the entire row
-        let (_drag_rect, drag_response) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), 0.0),
-            egui::Sense::click().union(egui::Sense::drag()),
-        );
+        // Use the label response for drag detection
+        let drag_response = label_response;
 
         // Handle drag-drop interactions
         if !is_editing {
@@ -284,45 +290,48 @@ impl Outliner {
             }
 
             // Handle hover for drop target detection
-            if state.drag_drop().is_dragging() && !is_dragging
-                && drag_response.hovered() {
-                    // Calculate drop position based on cursor location
-                    if let Some(cursor_pos) = ui.ctx().pointer_hover_pos() {
-                        let position = calculate_drop_position(
-                            cursor_pos.y,
-                            row_rect,
-                            is_collection,
+            if state.drag_drop().is_dragging() && !is_dragging {
+                // Check if cursor is hovering over this row
+                if let Some(cursor_pos) = ui.ctx().pointer_hover_pos()
+                    && row_rect.contains(cursor_pos) {
+                    let position = calculate_drop_position(
+                        cursor_pos.y,
+                        row_rect,
+                        is_collection,
+                    );
+
+                    // Validate the drop
+                    if let Some(source_id) = state.drag_drop().dragging_id() {
+                        let is_valid = validate_drop(
+                            source_id,
+                            &node_id,
+                            position,
+                            node,
+                            |target, source| Self::is_descendant_of_impl(all_nodes, target, source),
                         );
 
-                        // Validate the drop
-                        if let Some(source_id) = state.drag_drop().dragging_id() {
-                            let is_valid = validate_drop(
-                                source_id,
-                                &node_id,
-                                position,
-                                node,
-                                |target, source| Self::is_descendant_of_impl(all_nodes, target, source),
-                            );
-
-                            if is_valid {
-                                state.drag_drop_mut().update_hover(node_id.clone(), position);
-                            } else {
-                                state.drag_drop_mut().clear_hover();
-                            }
+                        if is_valid {
+                            state.drag_drop_mut().update_hover(node_id.clone(), position);
+                        } else {
+                            state.drag_drop_mut().clear_hover();
                         }
                     }
                 }
+            }
 
             // Handle drop
-            if state.drag_drop().is_dragging() && ui.input(|i| i.pointer.any_released())
-                && let Some((source_id, target_id, position)) = state.drag_drop_mut().end_drag() {
+            if state.drag_drop().is_dragging() && drag_response.drag_stopped() {
+                if let Some((source_id, target_id, position)) = state.drag_drop_mut().end_drag() {
                     // Invoke the on_move callback
                     actions.on_move(&source_id, &target_id, position);
                     
                     // Record the drop event in the response
                     response.drop_event = Some(DropEvent::new(source_id, target_id, position));
                     response.changed = true;
+                } else {
+                    state.drag_drop_mut().cancel_drag();
                 }
+            }
         }
 
         // Draw visual feedback for drag-drop
@@ -437,6 +446,7 @@ impl Outliner {
         node: &N,
         is_editing: bool,
         is_selected: bool,
+        icons_width: f32,
         state: &mut OutlinerState<N::Id>,
         actions: &mut A,
         response: &mut OutlinerResponse<N::Id>,
@@ -473,9 +483,14 @@ impl Outliner {
             let label_text = node.name();
             
             // Create a custom selectable label with our styling
+            // Include drag sensing so we can detect drag operations on the label
+            // Reserve space for action icons to prevent layout shifts
+            let available_width = ui.available_width();
+            let label_width = (available_width - icons_width - 10.0).max(50.0);
+            
             let (rect, label_response) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width() - 100.0, self.style.row_height),
-                egui::Sense::click(),
+                egui::vec2(label_width, self.style.row_height),
+                egui::Sense::click_and_drag(),
             );
 
             if ui.is_rect_visible(rect) {
