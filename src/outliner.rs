@@ -527,6 +527,22 @@ impl Outliner {
         }
     }
 
+    /// Collects all descendant node IDs recursively.
+    ///
+    /// This helper method traverses the tree starting from the given node
+    /// and collects all descendant IDs into a vector.
+    fn collect_descendant_ids<N>(node: &N) -> Vec<N::Id>
+    where
+        N: OutlinerNode,
+    {
+        let mut ids = Vec::new();
+        for child in node.children() {
+            ids.push(child.id());
+            ids.extend(Self::collect_descendant_ids(child));
+        }
+        ids
+    }
+
     /// Renders the action icons for a node.
     ///
     /// Icons are rendered right-to-left in the order they appear in the
@@ -537,6 +553,7 @@ impl Outliner {
         A: OutlinerActions<N>,
     {
         let node_id = node.id();
+        let is_collection = node.is_collection();
         
         for action_icon in node.action_icons().iter().rev() {
             match action_icon {
@@ -569,6 +586,12 @@ impl Outliner {
                     // Handle click to toggle visibility
                     if icon_response.clicked() {
                         actions.on_visibility_toggle(&node_id);
+                        // If this is a collection, apply to all children
+                        if is_collection {
+                            for child_id in Self::collect_descendant_ids(node) {
+                                actions.on_visibility_toggle(&child_id);
+                            }
+                        }
                     }
                 }
                 ActionIcon::Lock => {
@@ -600,6 +623,12 @@ impl Outliner {
                     // Handle click to toggle lock state
                     if icon_response.clicked() {
                         actions.on_lock_toggle(&node_id);
+                        // If this is a collection, apply to all children
+                        if is_collection {
+                            for child_id in Self::collect_descendant_ids(node) {
+                                actions.on_lock_toggle(&child_id);
+                            }
+                        }
                     }
                 }
                 ActionIcon::Selection => {
@@ -630,7 +659,19 @@ impl Outliner {
 
                     // Handle click to toggle selection
                     if icon_response.clicked() {
-                        actions.on_selection_toggle(&node_id);
+                        // Determine the new selection state based on current state
+                        let current_state = actions.is_selected(&node_id);
+                        let new_state = !current_state;
+                        
+                        // Apply the new state to the parent
+                        actions.on_select(&node_id, new_state);
+                        
+                        // If this is a collection, apply the same state to all children
+                        if is_collection {
+                            for child_id in Self::collect_descendant_ids(node) {
+                                actions.on_select(&child_id, new_state);
+                            }
+                        }
                     }
                 }
                 ActionIcon::Custom { icon, tooltip } => {
