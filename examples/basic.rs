@@ -255,14 +255,14 @@ impl LogEntry {
 /// Actions handler that manages node state and tracks user interactions.
 ///
 /// This struct demonstrates how to implement the OutlinerActions trait to:
-/// - Track which node is currently selected
+/// - Track which nodes are currently selected (supports multi-selection)
 /// - Maintain visibility state for each node
 /// - Maintain lock state for each node
 /// - Log all user interactions for debugging and demonstration
 ///
 /// The actions handler is the bridge between user interactions and your application state.
 struct TreeActions {
-    selected: Option<u64>,
+    selected: HashSet<u64>,
     visible: HashSet<u64>,
     locked: HashSet<u64>,
     event_log: VecDeque<LogEntry>,
@@ -278,7 +278,7 @@ impl TreeActions {
         }
 
         Self {
-            selected: None,
+            selected: HashSet::new(),
             visible,
             locked: HashSet::new(),
             event_log: VecDeque::new(),
@@ -301,7 +301,7 @@ impl TreeActions {
             visible_count: self.visible.len(),
             hidden_count: 46 - self.visible.len(),
             locked_count: self.locked.len(),
-            selected_count: if self.selected.is_some() { 1 } else { 0 },
+            selected_count: self.selected.len(),
         }
     }
 }
@@ -347,16 +347,16 @@ impl OutlinerActions<TreeNode> for TreeActions {
     }
 
     /// Called when a node's selection state changes.
-    /// This example implements single-selection behavior.
+    /// This example implements multi-selection behavior.
     fn on_select(&mut self, id: &u64, selected: bool) {
         if selected {
-            self.selected = Some(*id);
+            self.selected.insert(*id);
             self.log_event(
                 format!("Selected node {}", id),
                 EventType::Selection,
             );
-        } else if self.selected == Some(*id) {
-            self.selected = None;
+        } else {
+            self.selected.remove(id);
             self.log_event(
                 format!("Deselected node {}", id),
                 EventType::Selection,
@@ -366,7 +366,7 @@ impl OutlinerActions<TreeNode> for TreeActions {
 
     /// Query whether a node is currently selected.
     fn is_selected(&self, id: &u64) -> bool {
-        self.selected == Some(*id)
+        self.selected.contains(id)
     }
 
     /// Query whether a node is currently visible.
@@ -664,11 +664,19 @@ impl eframe::App for ExampleApp {
                         
                         ui.add_space(8.0);
                         
-                        if let Some(selected_id) = self.actions.selected {
-                            ui.label(egui::RichText::new(format!("Selected Node ID: {}", selected_id))
+                        if !self.actions.selected.is_empty() {
+                            ui.label(egui::RichText::new("Selected Node IDs:")
                                 .color(egui::Color32::from_rgb(100, 150, 255)));
+                            let mut selected_ids: Vec<_> = self.actions.selected.iter().collect();
+                            selected_ids.sort();
+                            for id in selected_ids.iter().take(5) {
+                                ui.label(format!("  • {}", id));
+                            }
+                            if selected_ids.len() > 5 {
+                                ui.label(format!("  ... and {} more", selected_ids.len() - 5));
+                            }
                         } else {
-                            ui.label(egui::RichText::new("No node selected")
+                            ui.label(egui::RichText::new("No nodes selected")
                                 .color(egui::Color32::GRAY));
                         }
                         
@@ -744,39 +752,48 @@ impl eframe::App for ExampleApp {
             // Handle drag-drop events
             // When a user drags a node and drops it on a target, this callback fires
             if let Some(drop_event) = response.drop_event() {
-                let source_id = &drop_event.source;
                 let target_id = &drop_event.target;
                 let position = drop_event.position;
 
-                // Step 1: Remove the source node from its current location
-                let mut removed_node = None;
-                for root in &mut self.tree {
-                    if let Some(node) = root.remove_node(*source_id) {
-                        removed_node = Some(node);
-                        break;
+                // Get all nodes being dragged (primary + selected)
+                let dragging_ids = response.dragging_nodes();
+                
+                if !dragging_ids.is_empty() {
+                    // Step 1: Remove all dragging nodes from their current locations
+                    let mut removed_nodes = Vec::new();
+                    for drag_id in dragging_ids {
+                        for root in &mut self.tree {
+                            if let Some(node) = root.remove_node(*drag_id) {
+                                removed_nodes.push(node);
+                                break;
+                            }
+                        }
                     }
-                }
 
-                // Step 2: Insert the node at the target position
-                if let Some(node) = removed_node {
-                    let mut inserted = false;
-                    for root in &mut self.tree {
-                        if root.insert_node(*target_id, node.clone(), position) {
-                            inserted = true;
-                            break;
+                    // Step 2: Insert all nodes at the target position
+                    let mut all_inserted = true;
+                    for node in removed_nodes {
+                        let mut inserted = false;
+                        for root in &mut self.tree {
+                            if root.insert_node(*target_id, node.clone(), position) {
+                                inserted = true;
+                                break;
+                            }
+                        }
+                        if !inserted {
+                            all_inserted = false;
                         }
                     }
                     
-                    if inserted {
+                    if all_inserted {
                         self.actions.log_event(
-                            format!("✓ Successfully moved node {} to target {} ({:?})",
-                                source_id, target_id, position),
+                            format!("✓ Successfully moved {} node(s) to target {} ({:?})",
+                                dragging_ids.len(), target_id, position),
                             EventType::DragDrop,
                         );
                     } else {
                         self.actions.log_event(
-                            format!("✗ Failed to move node {} to target {}",
-                                source_id, target_id),
+                            format!("✗ Failed to move some nodes to target {}", target_id),
                             EventType::DragDrop,
                         );
                     }

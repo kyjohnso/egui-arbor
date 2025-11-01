@@ -149,10 +149,23 @@ impl Outliner {
         // Load state from previous frame
         let mut state = OutlinerState::load(ui.ctx(), self.id);
 
+        // Collect all visible node IDs in order for range selection
+        let mut visible_nodes = Vec::new();
+        Self::collect_visible_node_ids(nodes, &state, &mut visible_nodes);
+
         // Render within a scroll area and capture the inner response
         let scroll_output = egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                // Track node rectangles for box selection
+                let mut node_rects: Vec<(N::Id, egui::Rect)> = Vec::new();
+
+                // Collect all currently selected nodes for potential multi-drag
+                let selected_nodes: Vec<N::Id> = visible_nodes.iter()
+                    .filter(|id| actions.is_selected(id))
+                    .cloned()
+                    .collect();
+
                 // Create the outliner response wrapper
                 let mut outliner_response = OutlinerResponse::new(
                     ui.allocate_response(egui::vec2(ui.available_width(), 0.0), egui::Sense::hover())
@@ -160,7 +173,75 @@ impl Outliner {
 
                 // Render all root nodes
                 for node in nodes {
-                    self.render_node(ui, node, 0, nodes, &mut state, actions, &mut outliner_response);
+                    self.render_node(ui, node, 0, nodes, &mut state, actions, &mut outliner_response, &visible_nodes, &mut node_rects, &selected_nodes);
+                }
+
+                // Handle box selection in the background
+                let available_rect = ui.available_rect_before_wrap();
+                let bg_response = ui.allocate_rect(available_rect, egui::Sense::click_and_drag());
+
+                // Check if we're starting a box selection (clicking in empty space)
+                if bg_response.drag_started() {
+                    if let Some(start_pos) = ui.ctx().pointer_interact_pos() {
+                        // Only start box selection if not clicking on any node
+                        let clicking_on_node = node_rects.iter().any(|(_, rect)| rect.contains(start_pos));
+                        if !clicking_on_node {
+                            state.start_box_selection(start_pos);
+                        }
+                    }
+                }
+
+                // Draw and update box selection
+                if let Some(box_sel) = state.box_selection() {
+                    if let Some(current_pos) = ui.ctx().pointer_interact_pos() {
+                        // Draw selection box
+                        let min_x = box_sel.start_pos.x.min(current_pos.x);
+                        let max_x = box_sel.start_pos.x.max(current_pos.x);
+                        let min_y = box_sel.start_pos.y.min(current_pos.y);
+                        let max_y = box_sel.start_pos.y.max(current_pos.y);
+                        let selection_rect = egui::Rect::from_min_max(
+                            egui::pos2(min_x, min_y),
+                            egui::pos2(max_x, max_y),
+                        );
+
+                        // Draw the selection box
+                        ui.painter().rect_stroke(
+                            selection_rect,
+                            0.0,
+                            egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 150, 255)),
+                        );
+                        ui.painter().rect_filled(
+                            selection_rect,
+                            0.0,
+                            egui::Color32::from_rgba_premultiplied(100, 150, 255, 30),
+                        );
+
+                        // Update selection based on box
+                        if bg_response.dragged() {
+                            let ctrl_or_cmd_pressed = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+                            
+                            // If not holding ctrl/cmd, deselect all first
+                            if !ctrl_or_cmd_pressed {
+                                for id in &visible_nodes {
+                                    if actions.is_selected(id) {
+                                        actions.on_select(id, false);
+                                    }
+                                }
+                            }
+
+                            // Select nodes that intersect with the box
+                            for (node_id, node_rect) in &node_rects {
+                                if selection_rect.intersects(*node_rect) {
+                                    actions.on_select(node_id, true);
+                                }
+                            }
+                            outliner_response.changed = true;
+                        }
+                    }
+                }
+
+                if bg_response.drag_stopped() {
+                    state.end_box_selection();
                 }
 
                 outliner_response
@@ -170,6 +251,24 @@ impl Outliner {
         state.store(ui.ctx(), self.id);
 
         scroll_output.inner
+    }
+
+    /// Collects all visible node IDs in order (depth-first traversal).
+    ///
+    /// This is used for shift-click range selection.
+    fn collect_visible_node_ids<N>(
+        nodes: &[N],
+        state: &OutlinerState<N::Id>,
+        result: &mut Vec<N::Id>,
+    ) where
+        N: OutlinerNode,
+    {
+        for node in nodes {
+            result.push(node.id());
+            if node.is_collection() && state.is_expanded(&node.id()) {
+                Self::collect_visible_node_ids(node.children(), state, result);
+            }
+        }
     }
 
     /// Renders a single node and its children recursively.
@@ -191,6 +290,9 @@ impl Outliner {
         state: &mut OutlinerState<N::Id>,
         actions: &mut A,
         response: &mut OutlinerResponse<N::Id>,
+        visible_nodes: &[N::Id],
+        node_rects: &mut Vec<(N::Id, egui::Rect)>,
+        selected_nodes: &[N::Id],
     ) where
         N: OutlinerNode,
         A: OutlinerActions<N>,
@@ -248,10 +350,52 @@ impl Outliner {
             // Handle label interactions
             if !is_editing {
                 if label_response.clicked() {
-                    let new_selection = !is_selected;
-                    actions.on_select(&node_id, new_selection);
-                    response.selected = Some(node_id.clone());
-                    response.changed = true;
+                    // Check for modifier keys
+                    let shift_pressed = ui.input(|i| i.modifiers.shift);
+                    let ctrl_or_cmd_pressed = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+
+                    if shift_pressed && state.last_selected().is_some() {
+                        // Shift-click: select range
+                        let last_id = state.last_selected().unwrap();
+                        if let (Some(start_idx), Some(end_idx)) = (
+                            visible_nodes.iter().position(|id| id == last_id),
+                            visible_nodes.iter().position(|id| id == &node_id),
+                        ) {
+                            let (min_idx, max_idx) = if start_idx < end_idx {
+                                (start_idx, end_idx)
+                            } else {
+                                (end_idx, start_idx)
+                            };
+                            
+                            // Select all nodes in range
+                            for id in &visible_nodes[min_idx..=max_idx] {
+                                actions.on_select(id, true);
+                            }
+                        }
+                        response.changed = true;
+                    } else if ctrl_or_cmd_pressed {
+                        // Ctrl/Cmd-click: toggle selection without clearing others
+                        let new_selection = !is_selected;
+                        actions.on_select(&node_id, new_selection);
+                        if new_selection {
+                            state.set_last_selected(Some(node_id.clone()));
+                        }
+                        response.selected = Some(node_id.clone());
+                        response.changed = true;
+                    } else {
+                        // Normal click: clear other selections and select this one
+                        // First, deselect all nodes
+                        for id in visible_nodes {
+                            if actions.is_selected(id) {
+                                actions.on_select(id, false);
+                            }
+                        }
+                        // Then select this node
+                        actions.on_select(&node_id, true);
+                        state.set_last_selected(Some(node_id.clone()));
+                        response.selected = Some(node_id.clone());
+                        response.changed = true;
+                    }
                 }
 
                 if label_response.double_clicked() {
@@ -277,6 +421,9 @@ impl Outliner {
         let row_rect = row_output.response.rect;
         let label_response = row_output.inner;
 
+        // Store the node rectangle for box selection
+        node_rects.push((node_id.clone(), row_rect));
+
         // Use the label response for drag detection
         let drag_response = label_response;
 
@@ -286,6 +433,18 @@ impl Outliner {
             if drag_response.drag_started() {
                 state.drag_drop_mut().start_drag(node_id.clone());
                 response.drag_started = Some(node_id.clone());
+                
+                // Collect all selected nodes for multi-drag
+                // If the dragged node is selected, include all selected nodes
+                // Otherwise, just drag this single node
+                let dragging_nodes = if actions.is_selected(&node_id) {
+                    selected_nodes.to_vec()
+                } else {
+                    vec![node_id.clone()]
+                };
+                
+                state.set_dragging_nodes(dragging_nodes.clone());
+                response.dragging_nodes = dragging_nodes;
                 response.changed = true;
             }
 
@@ -325,11 +484,18 @@ impl Outliner {
                     // Invoke the on_move callback
                     actions.on_move(&source_id, &target_id, position);
                     
+                    // Get the dragging nodes and add them to the response
+                    response.dragging_nodes = state.dragging_nodes().to_vec();
+                    
                     // Record the drop event in the response
                     response.drop_event = Some(DropEvent::new(source_id, target_id, position));
                     response.changed = true;
+                    
+                    // Clear dragging nodes after drop
+                    state.clear_dragging_nodes();
                 } else {
                     state.drag_drop_mut().cancel_drag();
+                    state.clear_dragging_nodes();
                 }
             }
         }
@@ -354,7 +520,7 @@ impl Outliner {
         // Render children if this is an expanded collection
         if is_collection && is_expanded {
             for child in node.children() {
-                self.render_node(ui, child, depth + 1, all_nodes, state, actions, response);
+                self.render_node(ui, child, depth + 1, all_nodes, state, actions, response, visible_nodes, node_rects, selected_nodes);
             }
         }
     }
