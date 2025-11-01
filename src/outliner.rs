@@ -876,3 +876,355 @@ impl Outliner {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::traits::{OutlinerNode, OutlinerActions, IconType, ActionIcon};
+    use std::collections::{HashSet, HashMap};
+
+    // Mock node for testing
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestNode {
+        id: u64,
+        name: String,
+        is_collection: bool,
+        children: Vec<TestNode>,
+    }
+
+    impl OutlinerNode for TestNode {
+        type Id = u64;
+
+        fn id(&self) -> Self::Id {
+            self.id
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn is_collection(&self) -> bool {
+            self.is_collection
+        }
+
+        fn children(&self) -> &[Self] {
+            &self.children
+        }
+
+        fn children_mut(&mut self) -> &mut Vec<Self> {
+            &mut self.children
+        }
+
+        fn icon(&self) -> Option<IconType> {
+            if self.is_collection {
+                Some(IconType::Collection)
+            } else {
+                Some(IconType::Entity)
+            }
+        }
+
+        fn action_icons(&self) -> Vec<ActionIcon> {
+            vec![ActionIcon::Visibility, ActionIcon::Lock, ActionIcon::Selection]
+        }
+    }
+
+    impl TestNode {
+        fn new(id: u64, name: &str, is_collection: bool) -> Self {
+            Self {
+                id,
+                name: name.to_string(),
+                is_collection,
+                children: Vec::new(),
+            }
+        }
+
+        fn with_children(mut self, children: Vec<TestNode>) -> Self {
+            self.children = children;
+            self
+        }
+    }
+
+    // Mock actions handler for testing
+    struct TestActions {
+        selected: HashSet<u64>,
+        visible: HashSet<u64>,
+        locked: HashSet<u64>,
+        renamed: HashMap<u64, String>,
+        moved: Vec<(u64, u64, DropPosition)>,
+        custom_actions: Vec<(u64, String)>,
+    }
+
+    impl TestActions {
+        fn new() -> Self {
+            Self {
+                selected: HashSet::new(),
+                visible: HashSet::new(),
+                locked: HashSet::new(),
+                renamed: HashMap::new(),
+                moved: Vec::new(),
+                custom_actions: Vec::new(),
+            }
+        }
+    }
+
+    impl OutlinerActions<TestNode> for TestActions {
+        fn on_rename(&mut self, id: &u64, new_name: String) {
+            self.renamed.insert(*id, new_name);
+        }
+
+        fn on_move(&mut self, id: &u64, target: &u64, position: DropPosition) {
+            self.moved.push((*id, *target, position));
+        }
+
+        fn on_select(&mut self, id: &u64, selected: bool) {
+            if selected {
+                self.selected.insert(*id);
+            } else {
+                self.selected.remove(id);
+            }
+        }
+
+        fn is_selected(&self, id: &u64) -> bool {
+            self.selected.contains(id)
+        }
+
+        fn is_visible(&self, id: &u64) -> bool {
+            self.visible.contains(id)
+        }
+
+        fn is_locked(&self, id: &u64) -> bool {
+            self.locked.contains(id)
+        }
+
+        fn on_visibility_toggle(&mut self, id: &u64) {
+            if self.visible.contains(id) {
+                self.visible.remove(id);
+            } else {
+                self.visible.insert(*id);
+            }
+        }
+
+        fn on_lock_toggle(&mut self, id: &u64) {
+            if self.locked.contains(id) {
+                self.locked.remove(id);
+            } else {
+                self.locked.insert(*id);
+            }
+        }
+
+        fn on_selection_toggle(&mut self, id: &u64) {
+            let is_selected = self.is_selected(id);
+            self.on_select(id, !is_selected);
+        }
+
+        fn on_custom_action(&mut self, id: &u64, icon: &str) {
+            self.custom_actions.push((*id, icon.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_collect_visible_node_ids_flat() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", false),
+            TestNode::new(2, "Node2", false),
+            TestNode::new(3, "Node3", false),
+        ];
+        
+        let state = OutlinerState::<u64>::default();
+        let mut result = Vec::new();
+        
+        Outliner::collect_visible_node_ids(&nodes, &state, &mut result);
+        
+        assert_eq!(result, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_collect_visible_node_ids_with_collapsed_children() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", true).with_children(vec![
+                TestNode::new(2, "Child1", false),
+                TestNode::new(3, "Child2", false),
+            ]),
+        ];
+        
+        let state = OutlinerState::<u64>::default();
+        let mut result = Vec::new();
+        
+        Outliner::collect_visible_node_ids(&nodes, &state, &mut result);
+        
+        // Only parent should be visible when collapsed
+        assert_eq!(result, vec![1]);
+    }
+
+    #[test]
+    fn test_collect_visible_node_ids_with_expanded_children() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", true).with_children(vec![
+                TestNode::new(2, "Child1", false),
+                TestNode::new(3, "Child2", false),
+            ]),
+        ];
+        
+        let mut state = OutlinerState::<u64>::default();
+        state.set_expanded(&1, true);
+        let mut result = Vec::new();
+        
+        Outliner::collect_visible_node_ids(&nodes, &state, &mut result);
+        
+        // Parent and children should be visible when expanded
+        assert_eq!(result, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_collect_visible_node_ids_nested() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", true).with_children(vec![
+                TestNode::new(2, "Child1", true).with_children(vec![
+                    TestNode::new(3, "GrandChild1", false),
+                ]),
+            ]),
+        ];
+        
+        let mut state = OutlinerState::<u64>::default();
+        state.set_expanded(&1, true);
+        state.set_expanded(&2, true);
+        let mut result = Vec::new();
+        
+        Outliner::collect_visible_node_ids(&nodes, &state, &mut result);
+        
+        assert_eq!(result, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_find_node_by_id_root_level() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", false),
+            TestNode::new(2, "Node2", false),
+        ];
+        
+        let found = Outliner::find_node_by_id_impl(&nodes, &1);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id(), 1);
+        
+        let found = Outliner::find_node_by_id_impl(&nodes, &2);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id(), 2);
+    }
+
+    #[test]
+    fn test_find_node_by_id_nested() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", true).with_children(vec![
+                TestNode::new(2, "Child1", false),
+                TestNode::new(3, "Child2", true).with_children(vec![
+                    TestNode::new(4, "GrandChild1", false),
+                ]),
+            ]),
+        ];
+        
+        let found = Outliner::find_node_by_id_impl(&nodes, &4);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id(), 4);
+    }
+
+    #[test]
+    fn test_find_node_by_id_not_found() {
+        let nodes = vec![
+            TestNode::new(1, "Node1", false),
+        ];
+        
+        let found = Outliner::find_node_by_id_impl(&nodes, &999);
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_contains_descendant_direct_child() {
+        let node = TestNode::new(1, "Parent", true).with_children(vec![
+            TestNode::new(2, "Child", false),
+        ]);
+        
+        assert!(Outliner::contains_descendant_impl(&node, &2));
+        assert!(!Outliner::contains_descendant_impl(&node, &999));
+    }
+
+    #[test]
+    fn test_contains_descendant_nested() {
+        let node = TestNode::new(1, "Parent", true).with_children(vec![
+            TestNode::new(2, "Child", true).with_children(vec![
+                TestNode::new(3, "GrandChild", false),
+            ]),
+        ]);
+        
+        assert!(Outliner::contains_descendant_impl(&node, &2));
+        assert!(Outliner::contains_descendant_impl(&node, &3));
+        assert!(!Outliner::contains_descendant_impl(&node, &1));
+    }
+
+    #[test]
+    fn test_is_descendant_of_impl() {
+        let nodes = vec![
+            TestNode::new(1, "Parent", true).with_children(vec![
+                TestNode::new(2, "Child", true).with_children(vec![
+                    TestNode::new(3, "GrandChild", false),
+                ]),
+            ]),
+        ];
+        
+        // Node 2 is a descendant of node 1
+        assert!(Outliner::is_descendant_of_impl(&nodes, &2, &1));
+        
+        // Node 3 is a descendant of node 1
+        assert!(Outliner::is_descendant_of_impl(&nodes, &3, &1));
+        
+        // Node 3 is a descendant of node 2
+        assert!(Outliner::is_descendant_of_impl(&nodes, &3, &2));
+        
+        // Node 1 is not a descendant of node 2
+        assert!(!Outliner::is_descendant_of_impl(&nodes, &1, &2));
+    }
+
+    #[test]
+    fn test_collect_descendant_ids() {
+        let node = TestNode::new(1, "Parent", true).with_children(vec![
+            TestNode::new(2, "Child1", false),
+            TestNode::new(3, "Child2", true).with_children(vec![
+                TestNode::new(4, "GrandChild", false),
+            ]),
+        ]);
+        
+        let ids = Outliner::collect_descendant_ids(&node);
+        assert_eq!(ids.len(), 3);
+        assert!(ids.contains(&2));
+        assert!(ids.contains(&3));
+        assert!(ids.contains(&4));
+    }
+
+    #[test]
+    fn test_collect_descendant_ids_empty() {
+        let node = TestNode::new(1, "Leaf", false);
+        let ids = Outliner::collect_descendant_ids(&node);
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn test_outliner_new() {
+        let outliner = Outliner::new("test_outliner");
+        // Just verify it can be created
+        assert_eq!(outliner.id, egui::Id::new("test_outliner"));
+    }
+
+    #[test]
+    fn test_outliner_with_style() {
+        let style = Style::default().with_indent(30.0);
+        let outliner = Outliner::new("test").with_style(style.clone());
+        assert_eq!(outliner.style.indent, 30.0);
+    }
+
+    #[test]
+    fn test_outliner_with_drag_drop_visuals() {
+        let visuals = DragDropVisuals::default();
+        let outliner = Outliner::new("test").with_drag_drop_visuals(visuals);
+        // Just verify it can be created with custom visuals
+        assert_eq!(outliner.drag_drop_visuals.drop_line_thickness, 2.0);
+    }
+}
