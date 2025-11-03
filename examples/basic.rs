@@ -89,7 +89,7 @@ fn load_unicode_font(fonts: &mut egui::FontDefinitions) -> bool {
         if let Ok(font_data) = std::fs::read(font_path) {
             fonts.font_data.insert(
                 "unicode_font".to_owned(),
-                egui::FontData::from_owned(font_data),
+                std::sync::Arc::new(egui::FontData::from_owned(font_data)),
             );
             fonts.families.get_mut(&egui::FontFamily::Proportional)
                 .unwrap()
