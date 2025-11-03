@@ -4,6 +4,7 @@
 //! - Integration of egui-arbor with Bevy 0.16.1
 //! - 3D scene with collections and objects (cubes, cylinders, cones)
 //! - Tree outliner synchronized with 3D scene visibility
+//! - Drag and drop to reorganize scene hierarchy
 //! - Orbit camera controls with mouse
 //! - Three collections with different colored objects
 //!
@@ -11,11 +12,13 @@
 //! - Left mouse: Orbit camera
 //! - Right mouse: Pan camera
 //! - Scroll: Zoom camera
+//! - Drag nodes in outliner to reorganize hierarchy
 //! - Click visibility icons in outliner to show/hide objects
 
 use bevy::prelude::*;
 use egui_arbor::{
-    ActionIcon, DropPosition, IconType, Outliner, OutlinerActions, OutlinerNode,
+    tree_ops::TreeOperations, ActionIcon, DropPosition, IconType, Outliner, OutlinerActions,
+    OutlinerNode,
 };
 use std::collections::HashSet;
 
@@ -125,6 +128,9 @@ impl OutlinerNode for TreeNode {
         vec![ActionIcon::Visibility]
     }
 }
+
+/// Implement TreeOperations to get drag-drop functionality
+impl TreeOperations for TreeNode {}
 
 /// Resource holding the scene tree structure
 #[derive(Resource)]
@@ -361,7 +367,7 @@ fn setup_scene(
 /// UI system showing the outliner
 fn ui_system(
     mut contexts: bevy_egui::EguiContexts,
-    scene_tree: ResMut<SceneTree>,
+    mut scene_tree: ResMut<SceneTree>,
     mut actions: ResMut<TreeActions>,
 ) {
     let ctx = contexts.ctx_mut();
@@ -372,10 +378,48 @@ fn ui_system(
             ui.heading("🌳 Scene Outliner");
             ui.separator();
 
+            ui.label("Drag and drop to reorganize");
             ui.label("Click the eye icon to toggle visibility");
             ui.add_space(8.0);
 
-            Outliner::new("scene_outliner").show(ui, &scene_tree.nodes, &mut *actions);
+            let response = Outliner::new("scene_outliner").show(ui, &scene_tree.nodes, &mut *actions);
+
+            // Handle drag-drop events
+            if let Some(drop_event) = response.drop_event() {
+                let target_id = &drop_event.target;
+                let position = drop_event.position;
+
+                // Get all nodes being dragged (primary + selected)
+                let dragging_ids = response.dragging_nodes();
+                
+                if !dragging_ids.is_empty() {
+                    // Step 1: Remove all dragging nodes from their current locations
+                    let mut removed_nodes = Vec::new();
+                    for drag_id in dragging_ids {
+                        for root in &mut scene_tree.nodes {
+                            if let Some(node) = root.remove_node(drag_id) {
+                                removed_nodes.push(node);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Step 2: Insert all nodes at the target position
+                    for node in removed_nodes {
+                        let mut inserted = false;
+                        for root in &mut scene_tree.nodes {
+                            if root.insert_node(target_id, node.clone(), position) {
+                                inserted = true;
+                                break;
+                            }
+                        }
+                        if !inserted {
+                            // If insertion failed, log it (in a real app you might want to restore the node)
+                            eprintln!("Failed to insert node {} at target {}", node.id, target_id);
+                        }
+                    }
+                }
+            }
         });
 }
 
