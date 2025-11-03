@@ -419,6 +419,133 @@ Icons are right-aligned with consistent spacing:
     Expand  Name              Right-aligned icons
 ```
 
+## Practical Example: How It All Works Together
+
+Let's trace through a complete drag-drop operation in the basic example to see how all the pieces fit together:
+
+### Step-by-Step Drag-Drop Flow
+
+```mermaid
+sequenceDiagram
+    participant App as ExampleApp
+    participant Tree as self.tree
+    participant Outliner as Outliner Widget
+    participant Actions as TreeActions
+    participant User as User
+    
+    Note over App: Frame N - User starts drag
+    App->>Outliner: show(ui, &self.tree, &mut self.actions)
+    Outliner->>Outliner: Renders tree from self.tree
+    User->>Outliner: Starts dragging node 5
+    Outliner->>Outliner: state.start_drag(5)
+    Outliner->>Outliner: Visual feedback: highlight node 5
+    
+    Note over App: Still Frame N - User hovers target
+    User->>Outliner: Hovers over node 10
+    Outliner->>Outliner: calculate_drop_position()
+    Outliner->>Outliner: validate_drop(5, 10, Inside)
+    Outliner->>Outliner: state.update_hover(10, Inside)
+    Outliner->>Outliner: Visual feedback: show drop indicator
+    
+    Note over App: Still Frame N - User drops
+    User->>Outliner: Releases mouse
+    Outliner->>Actions: on_move(&5, &10, Inside)
+    Actions->>Actions: Log event
+    Outliner->>Outliner: state.end_drag()
+    Outliner-->>App: Returns OutlinerResponse with drop_event
+    
+    Note over App: Still Frame N - After outliner returns
+    App->>App: Check response.drop_event()
+    App->>Tree: Remove node 5 from old location
+    App->>Tree: Insert node 5 into node 10's children
+    
+    Note over App: Frame N+1 - Next frame
+    App->>Outliner: show(ui, &self.tree, &mut self.actions)
+    Note over Outliner: Reads UPDATED tree!
+    Outliner->>User: Renders node 5 in new location
+```
+
+### Code Walkthrough
+
+Here's the actual code from [`examples/basic.rs`](examples/basic.rs:783-846) with annotations:
+
+```rust
+// Frame N: Render the outliner
+let response = Outliner::new("example_outliner")
+    .show(ui, &self.tree, &mut self.actions);
+    // ↑ Outliner reads self.tree (doesn't modify it)
+    // ↑ During drag, state is tracked internally
+    // ↑ on_move() callback fires when drop happens
+
+// Still Frame N: Check for drop event
+if let Some(drop_event) = response.drop_event() {
+    // ↑ Drop happened this frame!
+    
+    let target_id = &drop_event.target;
+    let position = drop_event.position;
+    let dragging_ids = response.dragging_nodes();
+    
+    // Step 1: Remove nodes from old locations
+    let mut removed_nodes = Vec::new();
+    for drag_id in dragging_ids {
+        for root in &mut self.tree {
+            if let Some(node) = root.remove_node(*drag_id) {
+                removed_nodes.push(node);
+                break;
+            }
+        }
+    }
+    
+    // Step 2: Insert at new location
+    for node in removed_nodes {
+        for root in &mut self.tree {
+            if root.insert_node(*target_id, node.clone(), position) {
+                break;
+            }
+        }
+    }
+    // ↑ self.tree is now modified
+}
+
+// Frame N+1: Next call to update()
+// Outliner will see the modified tree and render the new structure
+```
+
+### Why This Pattern Works
+
+1. **Single Source of Truth**: `self.tree` is always the authoritative data
+2. **Read-Only Rendering**: Outliner never modifies your tree directly
+3. **Event-Driven Updates**: You modify data in response to events
+4. **Frame Boundary Separation**: Modifications happen between frames
+5. **Immediate Feedback**: Visual feedback during drag keeps it smooth
+
+### Comparison: What Doesn't Work
+
+❌ **Anti-pattern: Modifying during render**
+```rust
+// DON'T DO THIS
+let response = Outliner::new("example")
+    .show(ui, &self.tree, &mut self.actions);
+
+// Trying to modify while outliner might still be using it
+if response.drag_started().is_some() {
+    self.tree.modify(); // ❌ Too early!
+}
+```
+
+✅ **Correct pattern: Modify after render completes**
+```rust
+// DO THIS
+let response = Outliner::new("example")
+    .show(ui, &self.tree, &mut self.actions);
+    // ↑ Outliner is done, returned control
+
+// Now safe to modify
+if let Some(drop_event) = response.drop_event() {
+    self.tree.modify(); // ✅ Correct timing!
+}
+```
+
 ## Usage Example
 
 ```rust
@@ -512,6 +639,233 @@ fn show_outliner(ui: &mut egui::Ui, nodes: &mut [SceneNode], actions: &mut Scene
     }
 }
 ```
+
+## Data Flow and Integration Patterns
+
+### Immediate Mode Data Flow
+
+The outliner follows egui's immediate mode paradigm where the widget is reconstructed each frame. Understanding this flow is crucial for proper integration:
+
+```mermaid
+sequenceDiagram
+    participant YourData as Your Tree Data
+    participant Outliner as Outliner Widget
+    participant User as User
+    
+    Note over YourData: Frame N
+    YourData->>Outliner: show(&tree, &mut actions)
+    Outliner->>User: Renders tree
+    User->>Outliner: Drags node
+    Outliner->>Outliner: Tracks drag state
+    User->>Outliner: Drops node
+    Outliner->>Outliner: Calls on_move()
+    Outliner-->>YourData: Returns response with drop_event
+    YourData->>YourData: Modifies tree structure
+    
+    Note over YourData: Frame N+1
+    YourData->>Outliner: show(&tree, &mut actions)
+    Note over Outliner: Sees updated tree!
+    Outliner->>User: Renders new hierarchy
+```
+
+**Key Points:**
+
+1. **Your data is the source of truth**: The tree structure you pass to [`Outliner::show()`](src/outliner.rs:138)
+2. **Outliner reads, doesn't modify**: The widget takes a reference and renders it
+3. **Callbacks notify changes**: [`on_move()`](src/traits.rs:242), [`on_rename()`](src/traits.rs:230), etc. are called during user interactions
+4. **You modify your data**: In response to callbacks or by checking the response
+5. **Next frame sees changes**: The updated structure is rendered on the next frame
+
+### Drag-Drop Mechanics
+
+The drag-drop system works through a carefully orchestrated sequence that maintains data integrity:
+
+#### Drag-Drop State Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Dragging: User starts drag
+    Dragging --> Hovering: Mouse over target
+    Hovering --> Dragging: Mouse leaves target
+    Hovering --> Dropped: User releases mouse
+    Dragging --> Cancelled: User releases outside
+    Dropped --> [*]: Modify data structure
+    Cancelled --> [*]: No changes
+    
+    note right of Dragging
+        Drag state tracked internally
+        Visual feedback shown
+        Source node highlighted
+    end note
+    
+    note right of Hovering
+        Drop position calculated
+        Validation performed
+        Drop indicator shown
+    end note
+    
+    note right of Dropped
+        on_move() callback fired
+        DropEvent in response
+        User modifies tree
+    end note
+```
+
+#### Why Drag-Drop Works Without Conflicts
+
+The key insight is that **drag state is ephemeral** and **data modification happens between frames**:
+
+1. **During Drag** (Frame N):
+   - Outliner tracks drag state internally
+   - Visual feedback is rendered
+   - Your tree structure is **not modified**
+   - User sees smooth drag operation
+
+2. **On Drop** (Still Frame N):
+   - [`on_move()`](src/traits.rs:242) callback is invoked
+   - [`DropEvent`](src/response.rs:295) is added to response
+   - Outliner completes rendering and returns
+
+3. **After Outliner Returns** (Frame N):
+   - You check [`response.drop_event()`](src/response.rs:236)
+   - You modify your tree structure
+   - Changes are ready for next frame
+
+4. **Next Frame** (Frame N+1):
+   - Outliner reads your **updated** tree structure
+   - Renders the new hierarchy
+   - User sees the result of the drag-drop
+
+**This works because:**
+- Drag operation completes in a single frame
+- Tree modification happens between frames
+- One frame lag is imperceptible to users
+- Visual feedback persists during the drag
+
+### Integration with External Systems
+
+The trait-based architecture allows integration with any data source, including ECS systems like Bevy:
+
+```mermaid
+graph LR
+    subgraph External System
+        ECS[ECS/Database/File System]
+        E[Entities/Records]
+    end
+    
+    subgraph Your Code
+        Builder[Tree View Builder]
+        Wrapper[Wrapper Structs]
+        Actions[Actions Handler]
+    end
+    
+    subgraph egui-arbor
+        Traits[OutlinerNode + OutlinerActions]
+        Widget[Outliner Widget]
+    end
+    
+    ECS --> Builder
+    E --> Builder
+    Builder --> Wrapper
+    Wrapper -->|implements| Traits
+    Actions -->|implements| Traits
+    Traits --> Widget
+    Widget -->|callbacks| Actions
+    Actions -->|modifies| ECS
+    Actions -->|modifies| E
+```
+
+#### Example: Bevy ECS Integration
+
+```rust
+// Wrapper struct that provides tree structure over Bevy entities
+struct BevyTreeNode {
+    entity: Entity,
+    name: String,
+    is_collection: bool,
+    children: Vec<BevyTreeNode>,
+}
+
+impl OutlinerNode for BevyTreeNode {
+    type Id = Entity;  // Use Bevy's Entity as the ID!
+    
+    fn id(&self) -> Self::Id {
+        self.entity
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+    
+    fn is_collection(&self) -> bool {
+        self.is_collection
+    }
+    
+    fn children(&self) -> &[Self] {
+        &self.children
+    }
+    
+    fn children_mut(&mut self) -> &mut Vec<Self> {
+        &mut self.children
+    }
+}
+
+// Actions handler that syncs with Bevy ECS
+struct BevyOutlinerActions<'w> {
+    commands: Commands<'w, 'static>,
+    selected: Res<'w, SelectedEntities>,
+    // ... other Bevy queries
+}
+
+impl<'w> OutlinerActions<BevyTreeNode> for BevyOutlinerActions<'w> {
+    fn on_move(&mut self, entity: &Entity, target: &Entity, position: DropPosition) {
+        // Modify ECS hierarchy immediately
+        match position {
+            DropPosition::Inside => {
+                self.commands.entity(*target).add_child(*entity);
+            }
+            // Handle Before/After by reordering children
+            _ => { /* ... */ }
+        }
+    }
+    
+    fn on_select(&mut self, entity: &Entity, selected: bool) {
+        // Update selection in Bevy resource
+        // ...
+    }
+    
+    fn is_selected(&self, entity: &Entity) -> bool {
+        self.selected.contains(entity)
+    }
+    
+    // ... other trait methods
+}
+
+// In your Bevy system
+fn outliner_ui_system(
+    mut commands: Commands,
+    hierarchy_query: Query<(Entity, &HierarchyNode, &Children)>,
+) {
+    // Build tree view from ECS (cache this if hierarchy doesn't change often)
+    let tree = build_tree_from_ecs(&hierarchy_query);
+    
+    let mut actions = BevyOutlinerActions { commands, /* ... */ };
+    let response = Outliner::new("hierarchy")
+        .show(ui, &tree, &mut actions);
+    
+    // Modifications already applied to ECS via callbacks
+    // Next frame will see the updated hierarchy
+}
+```
+
+**Integration Pattern:**
+
+1. **Query your external system** to build the tree view
+2. **Implement traits** on wrapper structs
+3. **Pass to outliner** which renders and handles interactions
+4. **Sync changes back** through action callbacks
+5. **Cache tree view** if your data doesn't change every frame
 
 ## Key Design Decisions
 

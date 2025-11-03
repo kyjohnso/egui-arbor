@@ -1,5 +1,7 @@
 # egui-arbor
 
+<img src="assets/images/basic_example_image.png" width="600" alt="egui-arbor example">
+
 A flexible tree/outliner widget for [egui](https://github.com/emilk/egui) - hierarchical data visualization and editing inspired by Blender's outliner.
 
 [![Crates.io](https://img.shields.io/crates/v/egui-arbor.svg)](https://crates.io/crates/egui-arbor)
