@@ -183,8 +183,17 @@ struct TreeActions {
 impl Default for TreeActions {
     fn default() -> Self {
         let mut visible = HashSet::new();
-        // All objects visible by default (IDs 1-11)
-        for id in 1..=11 {
+        // All nodes visible by default (collections: 0, 4, 8 and objects: 1-3, 5-7, 9-11)
+        visible.insert(0); // Collection Red
+        for id in 1..=3 {
+            visible.insert(id);
+        }
+        visible.insert(4); // Collection Green
+        for id in 5..=7 {
+            visible.insert(id);
+        }
+        visible.insert(8); // Collection Blue
+        for id in 9..=11 {
             visible.insert(id);
         }
         Self { visible }
