@@ -33,7 +33,6 @@ bevy = { version = "0.16.1", default-features = false, features = [
     "hdr",
     "ktx2",
     "zstd",
-    "vorbis",
     "x11",
     "wayland",
     "bevy_gizmos",
