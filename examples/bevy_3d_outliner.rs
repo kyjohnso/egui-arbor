@@ -91,6 +91,22 @@ impl TreeNode {
             children: Vec::new(),
         }
     }
+
+    /// Recursively find and rename a node by ID
+    fn rename_node(&mut self, id: u64, new_name: String) -> bool {
+        if self.id == id {
+            self.name = new_name;
+            return true;
+        }
+        
+        for child in &mut self.children {
+            if child.rename_node(id, new_name.clone()) {
+                return true;
+            }
+        }
+        
+        false
+    }
 }
 
 impl OutlinerNode for TreeNode {
@@ -201,7 +217,11 @@ impl Default for TreeActions {
 }
 
 impl OutlinerActions<TreeNode> for TreeActions {
-    fn on_rename(&mut self, _id: &u64, _new_name: String) {}
+    fn on_rename(&mut self, id: &u64, new_name: String) {
+        // Note: The actual renaming happens in the ui_system where we have mutable access to SceneTree
+        // This callback is just for tracking that a rename occurred
+        println!("Rename requested for node {}: {}", id, new_name);
+    }
 
     fn on_move(&mut self, _id: &u64, _target: &u64, _position: DropPosition) {}
 
@@ -389,9 +409,20 @@ fn ui_system(
 
             ui.label("Drag and drop to reorganize");
             ui.label("Click the eye icon to toggle visibility");
+            ui.label("Double-click to rename");
             ui.add_space(8.0);
 
             let response = Outliner::new("scene_outliner").show(ui, &scene_tree.nodes, &mut *actions);
+
+            // Handle rename events
+            if let Some((node_id, new_name)) = response.renamed() {
+                // Update the node name in the tree
+                for root in &mut scene_tree.nodes {
+                    if root.rename_node(*node_id, new_name.to_string()) {
+                        break;
+                    }
+                }
+            }
 
             // Handle drag-drop events
             if let Some(drop_event) = response.drop_event() {

@@ -400,7 +400,7 @@ impl Outliner {
                 }
 
                 if label_response.double_clicked() {
-                    state.start_editing(node_id.clone());
+                    state.start_editing(node_id.clone(), node.name().to_string());
                     response.double_clicked = Some(node_id.clone());
                     response.changed = true;
                 }
@@ -624,11 +624,11 @@ impl Outliner {
     {
         if is_editing {
             // Render text edit for renaming
-            let mut text = node.name().to_string();
-            let text_edit_response = ui.text_edit_singleline(&mut text);
+            let text_edit_response = ui.text_edit_singleline(state.editing_text_mut());
 
             // Check for Enter key to confirm
             if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let text = state.editing_text().to_string();
                 actions.on_rename(&node.id(), text.clone());
                 state.stop_editing();
                 response.renamed = Some((node.id(), text));
