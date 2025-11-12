@@ -321,10 +321,10 @@ pub trait OutlinerActions<N: OutlinerNode> {
 pub enum IconType {
     /// Icon for collection nodes (nodes that can contain children)
     Collection,
-    
+
     /// Icon for entity nodes (leaf nodes)
     Entity,
-    
+
     /// Custom icon with a user-defined identifier
     ///
     /// The string can be used to look up custom icon rendering logic
@@ -343,19 +343,19 @@ pub enum ActionIcon {
     /// Typically displayed as an eye icon. The visual state reflects
     /// the result of [`OutlinerActions::is_visible`].
     Visibility,
-    
+
     /// Toggle lock state of the node
     ///
     /// Typically displayed as a lock/unlock icon. The visual state reflects
     /// the result of [`OutlinerActions::is_locked`].
     Lock,
-    
+
     /// Toggle selection state of the node
     ///
     /// Typically displayed as a checkbox or selection indicator. The visual
     /// state reflects the result of [`OutlinerActions::is_selected`].
     Selection,
-    
+
     /// Custom action icon with user-defined behavior
     ///
     /// # Fields
@@ -378,10 +378,10 @@ pub enum ActionIcon {
 pub enum DropPosition {
     /// Place the node before the target (as a sibling)
     Before,
-    
+
     /// Place the node after the target (as a sibling)
     After,
-    
+
     /// Place the node inside the target (as a child)
     ///
     /// This is only valid if the target is a collection node.

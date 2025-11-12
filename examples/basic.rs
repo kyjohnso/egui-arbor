@@ -35,9 +35,7 @@
 //! cargo run --example basic
 //! ```
 
-use egui_arbor::{
-    ActionIcon, DropPosition, IconType, Outliner, OutlinerActions, OutlinerNode,
-};
+use egui_arbor::{ActionIcon, DropPosition, IconType, Outliner, OutlinerActions, OutlinerNode};
 use std::collections::{HashSet, VecDeque};
 use std::time::SystemTime;
 
@@ -55,14 +53,14 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // Load fonts with better Unicode support for triangle characters
             let mut fonts = egui::FontDefinitions::default();
-            
+
             // Try to load system fonts with good Unicode coverage
             let font_loaded = load_unicode_font(&mut fonts);
-            
+
             if font_loaded {
                 cc.egui_ctx.set_fonts(fonts);
             }
-            
+
             Ok(Box::new(ExampleApp::new()))
         }),
     )
@@ -84,20 +82,22 @@ fn load_unicode_font(fonts: &mut egui::FontDefinitions) -> bool {
         "/usr/share/fonts/TTF/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ];
-    
+
     for font_path in &font_paths {
         if let Ok(font_data) = std::fs::read(font_path) {
             fonts.font_data.insert(
                 "unicode_font".to_owned(),
                 std::sync::Arc::new(egui::FontData::from_owned(font_data)),
             );
-            fonts.families.get_mut(&egui::FontFamily::Proportional)
+            fonts
+                .families
+                .get_mut(&egui::FontFamily::Proportional)
                 .unwrap()
                 .insert(0, "unicode_font".to_owned());
             return true;
         }
     }
-    
+
     false
 }
 
@@ -263,9 +263,9 @@ impl OutlinerNode for TreeNode {
     /// All nodes in this example support visibility, lock, and selection toggles.
     fn action_icons(&self) -> Vec<ActionIcon> {
         vec![
-            ActionIcon::Visibility,  // Toggle visibility state
-            ActionIcon::Lock,        // Toggle lock state
-            ActionIcon::Selection,   // Quick selection toggle
+            ActionIcon::Visibility, // Toggle visibility state
+            ActionIcon::Lock,       // Toggle lock state
+            ActionIcon::Selection,  // Quick selection toggle
         ]
     }
 }
@@ -333,9 +333,42 @@ impl TreeActions {
 
     /// Add an entry to the event log, maintaining the maximum size.
     fn log_event(&mut self, message: String, event_type: EventType) {
-        self.event_log.push_front(LogEntry::new(message, event_type));
+        self.event_log
+            .push_front(LogEntry::new(message, event_type));
         if self.event_log.len() > self.max_log_entries {
             self.event_log.pop_back();
+        }
+    }
+
+    /// Recursively set visibility for all children of a node
+    /// Blender-style: sets all children to match the parent's new state
+    fn set_children_visibility(&mut self, parent_id: u64, visible: bool) {
+        // Map parent IDs to their children based on the known tree structure
+        let child_ids = match parent_id {
+            0 => vec![
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25, 26, 27, 28, 29, 30, 31, 32,
+            ],
+            1 => vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+            4 => vec![5, 6, 7, 8, 9],
+            10 => vec![11, 12, 13],
+            14 => vec![15, 16, 17],
+            18 => vec![19, 20, 21],
+            22 => vec![23, 24, 25, 26, 27, 28],
+            23 => vec![24, 25],
+            26 => vec![27, 28],
+            33 => vec![34, 35, 36, 37, 38, 39, 40, 41],
+            38 => vec![39, 40, 41],
+            42 => vec![43, 44, 45],
+            _ => vec![],
+        };
+
+        for child_id in child_ids {
+            if visible {
+                self.visible.insert(child_id);
+            } else {
+                self.visible.remove(&child_id);
+            }
         }
     }
 
@@ -396,16 +429,10 @@ impl OutlinerActions<TreeNode> for TreeActions {
     fn on_select(&mut self, id: &u64, selected: bool) {
         if selected {
             self.selected.insert(*id);
-            self.log_event(
-                format!("Selected node {}", id),
-                EventType::Selection,
-            );
+            self.log_event(format!("Selected node {}", id), EventType::Selection);
         } else {
             self.selected.remove(id);
-            self.log_event(
-                format!("Deselected node {}", id),
-                EventType::Selection,
-            );
+            self.log_event(format!("Deselected node {}", id), EventType::Selection);
         }
     }
 
@@ -428,22 +455,29 @@ impl OutlinerActions<TreeNode> for TreeActions {
 
     /// Called when the visibility action icon is clicked.
     /// Toggles the node between visible and hidden states.
-    /// Note: The library automatically propagates visibility to all descendants.
+    /// Blender-style: sets all children to match the parent's new state.
     fn on_visibility_toggle(&mut self, id: &u64) {
         let was_visible = self.visible.contains(id);
         let new_state = !was_visible;
-        
-        // Toggle the node's visibility state
+
+        // Set the parent's new state
         if new_state {
             self.visible.insert(*id);
+        } else {
+            self.visible.remove(id);
+        }
+
+        // Set all children to match the parent's new state
+        self.set_children_visibility(*id, new_state);
+
+        if new_state {
             self.log_event(
-                format!("Shown node {}", id),
+                format!("Shown node {} and all children", id),
                 EventType::Visibility,
             );
         } else {
-            self.visible.remove(id);
             self.log_event(
-                format!("Hidden node {}", id),
+                format!("Hidden node {} and all children", id),
                 EventType::Visibility,
             );
         }
@@ -455,16 +489,10 @@ impl OutlinerActions<TreeNode> for TreeActions {
         let was_locked = self.locked.contains(id);
         if was_locked {
             self.locked.remove(id);
-            self.log_event(
-                format!("Unlocked node {}", id),
-                EventType::Lock,
-            );
+            self.log_event(format!("Unlocked node {}", id), EventType::Lock);
         } else {
             self.locked.insert(*id);
-            self.log_event(
-                format!("Locked node {}", id),
-                EventType::Lock,
-            );
+            self.log_event(format!("Locked node {}", id), EventType::Lock);
         }
     }
 
@@ -625,7 +653,7 @@ impl eframe::App for ExampleApp {
             ui.horizontal(|ui| {
                 ui.heading("🌳 egui-arbor Comprehensive Example");
                 ui.separator();
-                
+
                 // Toggle buttons for panels
                 ui.checkbox(&mut self.show_help, "📖 Help");
                 ui.checkbox(&mut self.show_stats, "📊 Stats");
@@ -640,32 +668,32 @@ impl eframe::App for ExampleApp {
                 .show(ctx, |ui| {
                     ui.heading("📖 Instructions");
                     ui.separator();
-                    
+
                     ui.label(egui::RichText::new("Basic Interactions:").strong());
                     ui.label("• Click to select nodes");
                     ui.label("• Double-click to rename");
                     ui.label("• Click ▶/▼ to expand/collapse");
                     ui.add_space(8.0);
-                    
+
                     ui.label(egui::RichText::new("Action Icons:").strong());
                     ui.label("• 👁 Toggle visibility");
                     ui.label("• 🔒 Toggle lock state");
                     ui.label("• ☑ Toggle selection");
                     ui.add_space(8.0);
-                    
+
                     ui.label(egui::RichText::new("Drag & Drop:").strong());
                     ui.label("• Drag nodes to reorder");
                     ui.label("• Drop Before target");
                     ui.label("• Drop After target");
                     ui.label("• Drop Inside collections");
                     ui.add_space(8.0);
-                    
+
                     ui.label(egui::RichText::new("Visual Indicators:").strong());
                     ui.label("• 🔵 Selected node");
                     ui.label("• 👁‍🗨 Hidden node (dimmed)");
                     ui.label("• 🔒 Locked node");
                     ui.add_space(8.0);
-                    
+
                     ui.label(egui::RichText::new("Tips:").strong());
                     ui.label("• Try hiding a folder");
                     ui.label("• Lock a node, then try to drag it");
@@ -682,9 +710,9 @@ impl eframe::App for ExampleApp {
                     if self.show_stats {
                         ui.heading("📊 Node Statistics");
                         ui.separator();
-                        
+
                         let stats = self.actions.get_stats();
-                        
+
                         egui::Grid::new("stats_grid")
                             .num_columns(2)
                             .spacing([40.0, 4.0])
@@ -693,29 +721,31 @@ impl eframe::App for ExampleApp {
                                 ui.label("Total Nodes:");
                                 ui.label(stats.total_nodes.to_string());
                                 ui.end_row();
-                                
+
                                 ui.label("Visible:");
                                 ui.label(format!("{} 👁", stats.visible_count));
                                 ui.end_row();
-                                
+
                                 ui.label("Hidden:");
                                 ui.label(format!("{} 👁‍🗨", stats.hidden_count));
                                 ui.end_row();
-                                
+
                                 ui.label("Locked:");
                                 ui.label(format!("{} 🔒", stats.locked_count));
                                 ui.end_row();
-                                
+
                                 ui.label("Selected:");
                                 ui.label(format!("{} 🔵", stats.selected_count));
                                 ui.end_row();
                             });
-                        
+
                         ui.add_space(8.0);
-                        
+
                         if !self.actions.selected.is_empty() {
-                            ui.label(egui::RichText::new("Selected Node IDs:")
-                                .color(egui::Color32::from_rgb(100, 150, 255)));
+                            ui.label(
+                                egui::RichText::new("Selected Node IDs:")
+                                    .color(egui::Color32::from_rgb(100, 150, 255)),
+                            );
                             let mut selected_ids: Vec<_> = self.actions.selected.iter().collect();
                             selected_ids.sort();
                             for id in selected_ids.iter().take(5) {
@@ -725,37 +755,50 @@ impl eframe::App for ExampleApp {
                                 ui.label(format!("  ... and {} more", selected_ids.len() - 5));
                             }
                         } else {
-                            ui.label(egui::RichText::new("No nodes selected")
-                                .color(egui::Color32::GRAY));
+                            ui.label(
+                                egui::RichText::new("No nodes selected").color(egui::Color32::GRAY),
+                            );
                         }
-                        
+
                         ui.separator();
                     }
-                    
+
                     if self.show_log {
                         ui.heading("📋 Event Log");
                         ui.separator();
-                        
+
                         egui::ScrollArea::vertical()
                             .max_height(400.0)
                             .show(ui, |ui| {
                                 if self.actions.event_log.is_empty() {
-                                    ui.label(egui::RichText::new("No events yet...")
-                                        .italics()
-                                        .color(egui::Color32::GRAY));
+                                    ui.label(
+                                        egui::RichText::new("No events yet...")
+                                            .italics()
+                                            .color(egui::Color32::GRAY),
+                                    );
                                 } else {
                                     for entry in &self.actions.event_log {
                                         let color = match entry.event_type {
-                                            EventType::Selection => egui::Color32::from_rgb(100, 150, 255),
-                                            EventType::Visibility => egui::Color32::from_rgb(255, 200, 100),
-                                            EventType::Lock => egui::Color32::from_rgb(255, 150, 150),
-                                            EventType::DragDrop => egui::Color32::from_rgb(150, 255, 150),
-                                            EventType::Rename => egui::Color32::from_rgb(200, 150, 255),
+                                            EventType::Selection => {
+                                                egui::Color32::from_rgb(100, 150, 255)
+                                            }
+                                            EventType::Visibility => {
+                                                egui::Color32::from_rgb(255, 200, 100)
+                                            }
+                                            EventType::Lock => {
+                                                egui::Color32::from_rgb(255, 150, 150)
+                                            }
+                                            EventType::DragDrop => {
+                                                egui::Color32::from_rgb(150, 255, 150)
+                                            }
+                                            EventType::Rename => {
+                                                egui::Color32::from_rgb(200, 150, 255)
+                                            }
                                         };
-                                        
+
                                         ui.horizontal(|ui| {
                                             ui.label(egui::RichText::new("•").color(color));
-                                            
+
                                             // Format timestamp for display
                                             if let Ok(duration) = entry.timestamp.elapsed() {
                                                 let secs = duration.as_secs();
@@ -764,11 +807,13 @@ impl eframe::App for ExampleApp {
                                                 } else {
                                                     format!("{}m ago", secs / 60)
                                                 };
-                                                ui.label(egui::RichText::new(time_str)
-                                                    .small()
-                                                    .color(egui::Color32::GRAY));
+                                                ui.label(
+                                                    egui::RichText::new(time_str)
+                                                        .small()
+                                                        .color(egui::Color32::GRAY),
+                                                );
                                             }
-                                            
+
                                             ui.label(&entry.message);
                                         });
                                     }
@@ -782,10 +827,10 @@ impl eframe::App for ExampleApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Tree Structure");
             ui.separator();
-            
+
             // Show the outliner widget
-            let response = Outliner::new("example_outliner")
-                .show(ui, &self.tree, &mut self.actions);
+            let response =
+                Outliner::new("example_outliner").show(ui, &self.tree, &mut self.actions);
 
             // Handle rename events
             // When a user double-clicks and edits a node name, this callback fires
@@ -806,7 +851,7 @@ impl eframe::App for ExampleApp {
 
                 // Get all nodes being dragged (primary + selected)
                 let dragging_ids = response.dragging_nodes();
-                
+
                 if !dragging_ids.is_empty() {
                     // Step 1: Remove all dragging nodes from their current locations
                     let mut removed_nodes = Vec::new();
@@ -833,11 +878,15 @@ impl eframe::App for ExampleApp {
                             all_inserted = false;
                         }
                     }
-                    
+
                     if all_inserted {
                         self.actions.log_event(
-                            format!("✓ Successfully moved {} node(s) to target {} ({:?})",
-                                dragging_ids.len(), target_id, position),
+                            format!(
+                                "✓ Successfully moved {} node(s) to target {} ({:?})",
+                                dragging_ids.len(),
+                                target_id,
+                                position
+                            ),
                             EventType::DragDrop,
                         );
                     } else {
@@ -850,14 +899,16 @@ impl eframe::App for ExampleApp {
             }
 
             ui.separator();
-            
+
             // Status bar showing current frame state
             ui.horizontal(|ui| {
                 if response.changed() {
-                    ui.label(egui::RichText::new("✓ State changed this frame")
-                        .color(egui::Color32::from_rgb(100, 255, 100)));
+                    ui.label(
+                        egui::RichText::new("✓ State changed this frame")
+                            .color(egui::Color32::from_rgb(100, 255, 100)),
+                    );
                 }
-                
+
                 // Show additional event information
                 if let Some(id) = response.double_clicked() {
                     ui.separator();

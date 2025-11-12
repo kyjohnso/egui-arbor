@@ -30,19 +30,19 @@ use std::time::SystemTime;
 pub enum EventType {
     /// Node selection or deselection event.
     Selection,
-    
+
     /// Visibility toggle event (show/hide).
     Visibility,
-    
+
     /// Lock state toggle event.
     Lock,
-    
+
     /// Drag-and-drop operation event.
     DragDrop,
-    
+
     /// Node rename event.
     Rename,
-    
+
     /// Custom event type with a string identifier.
     Custom(String),
 }
@@ -82,13 +82,13 @@ impl EventType {
 pub struct LogEntry<Id> {
     /// When the event occurred.
     pub timestamp: SystemTime,
-    
+
     /// Human-readable description of the event.
     pub message: String,
-    
+
     /// The type of event that occurred.
     pub event_type: EventType,
-    
+
     /// The ID of the node involved in the event, if applicable.
     pub node_id: Option<Id>,
 }
@@ -214,7 +214,7 @@ impl<Id> LogEntry<Id> {
 pub struct EventLog<Id> {
     /// The log entries, with most recent first.
     entries: VecDeque<LogEntry<Id>>,
-    
+
     /// Maximum number of entries to keep.
     max_entries: usize,
 }
@@ -261,11 +261,8 @@ impl<Id> EventLog<Id> {
     /// log.log("Selected node 5", EventType::Selection, Some(5u64));
     /// ```
     pub fn log(&mut self, message: impl Into<String>, event_type: EventType, node_id: Option<Id>) {
-        self.entries.push_front(LogEntry::new(
-            message.into(),
-            event_type,
-            node_id,
-        ));
+        self.entries
+            .push_front(LogEntry::new(message.into(), event_type, node_id));
 
         if self.entries.len() > self.max_entries {
             self.entries.pop_back();
@@ -397,7 +394,9 @@ impl<Id> EventLog<Id> {
     /// assert_eq!(selections.len(), 2);
     /// ```
     pub fn filter_by_type(&self, event_type: &EventType) -> impl Iterator<Item = &LogEntry<Id>> {
-        self.entries.iter().filter(move |entry| &entry.event_type == event_type)
+        self.entries
+            .iter()
+            .filter(move |entry| &entry.event_type == event_type)
     }
 }
 
@@ -437,11 +436,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_event_type_str() {
-        let entry = LogEntry::<u64>::new(
-            "Test".into(),
-            EventType::Rename,
-            None,
-        );
+        let entry = LogEntry::<u64>::new("Test".into(), EventType::Rename, None);
 
         assert_eq!(entry.event_type_str(), "Rename");
     }
@@ -457,10 +452,10 @@ mod tests {
     #[test]
     fn test_event_log_log() {
         let mut log = EventLog::new(10);
-        
+
         log.log("Event 1", EventType::Selection, Some(1u64));
         assert_eq!(log.len(), 1);
-        
+
         log.log("Event 2", EventType::Rename, Some(2u64));
         assert_eq!(log.len(), 2);
     }
@@ -468,14 +463,14 @@ mod tests {
     #[test]
     fn test_event_log_max_capacity() {
         let mut log = EventLog::new(3);
-        
+
         log.log("Event 1", EventType::Selection, Some(1u64));
         log.log("Event 2", EventType::Selection, Some(2u64));
         log.log("Event 3", EventType::Selection, Some(3u64));
         log.log("Event 4", EventType::Selection, Some(4u64));
-        
+
         assert_eq!(log.len(), 3);
-        
+
         // Most recent entries should be kept
         let entries: Vec<_> = log.entries().collect();
         assert_eq!(entries[0].message, "Event 4");
@@ -486,11 +481,11 @@ mod tests {
     #[test]
     fn test_event_log_clear() {
         let mut log = EventLog::<u64>::new(10);
-        
+
         log.log("Event 1", EventType::Selection, None);
         log.log("Event 2", EventType::Selection, None);
         assert_eq!(log.len(), 2);
-        
+
         log.clear();
         assert_eq!(log.len(), 0);
         assert!(log.is_empty());
@@ -499,16 +494,16 @@ mod tests {
     #[test]
     fn test_event_log_set_max_entries() {
         let mut log = EventLog::new(10);
-        
+
         for i in 0..10 {
             log.log(format!("Event {}", i), EventType::Selection, Some(i));
         }
         assert_eq!(log.len(), 10);
-        
+
         log.set_max_entries(5);
         assert_eq!(log.len(), 5);
         assert_eq!(log.max_entries(), 5);
-        
+
         // Most recent entries should be kept
         let entries: Vec<_> = log.entries().collect();
         assert_eq!(entries[0].node_id, Some(9));
@@ -518,19 +513,19 @@ mod tests {
     #[test]
     fn test_event_log_filter_by_type() {
         let mut log = EventLog::new(10);
-        
+
         log.log("Select 1", EventType::Selection, Some(1u64));
         log.log("Rename 1", EventType::Rename, Some(2u64));
         log.log("Select 2", EventType::Selection, Some(3u64));
         log.log("Lock 1", EventType::Lock, Some(4u64));
         log.log("Select 3", EventType::Selection, Some(5u64));
-        
+
         let selections: Vec<_> = log.filter_by_type(&EventType::Selection).collect();
         assert_eq!(selections.len(), 3);
-        
+
         let renames: Vec<_> = log.filter_by_type(&EventType::Rename).collect();
         assert_eq!(renames.len(), 1);
-        
+
         let visibility: Vec<_> = log.filter_by_type(&EventType::Visibility).collect();
         assert_eq!(visibility.len(), 0);
     }
@@ -544,12 +539,8 @@ mod tests {
 
     #[test]
     fn test_log_entry_format_elapsed() {
-        let entry = LogEntry::<u64>::new(
-            "Test".into(),
-            EventType::Selection,
-            None,
-        );
-        
+        let entry = LogEntry::<u64>::new("Test".into(), EventType::Selection, None);
+
         let formatted = entry.format_elapsed();
         assert!(formatted.ends_with("ago"));
     }
