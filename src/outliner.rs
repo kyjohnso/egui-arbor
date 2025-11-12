@@ -181,63 +181,61 @@ impl Outliner {
                 let bg_response = ui.allocate_rect(available_rect, egui::Sense::click_and_drag());
 
                 // Check if we're starting a box selection (clicking in empty space)
-                if bg_response.drag_started() {
-                    if let Some(start_pos) = ui.ctx().pointer_interact_pos() {
-                        // Only start box selection if not clicking on any node
-                        let clicking_on_node = node_rects.iter().any(|(_, rect)| rect.contains(start_pos));
-                        if !clicking_on_node {
-                            state.start_box_selection(start_pos);
-                        }
+                if bg_response.drag_started()
+                    && let Some(start_pos) = ui.ctx().pointer_interact_pos() {
+                    // Only start box selection if not clicking on any node
+                    let clicking_on_node = node_rects.iter().any(|(_, rect)| rect.contains(start_pos));
+                    if !clicking_on_node {
+                        state.start_box_selection(start_pos);
                     }
                 }
 
                 // Draw and update box selection
-                if let Some(box_sel) = state.box_selection() {
-                    if let Some(current_pos) = ui.ctx().pointer_interact_pos() {
-                        // Draw selection box
-                        let min_x = box_sel.start_pos.x.min(current_pos.x);
-                        let max_x = box_sel.start_pos.x.max(current_pos.x);
-                        let min_y = box_sel.start_pos.y.min(current_pos.y);
-                        let max_y = box_sel.start_pos.y.max(current_pos.y);
-                        let selection_rect = egui::Rect::from_min_max(
-                            egui::pos2(min_x, min_y),
-                            egui::pos2(max_x, max_y),
-                        );
+                if let Some(box_sel) = state.box_selection()
+                    && let Some(current_pos) = ui.ctx().pointer_interact_pos() {
+                    // Draw selection box
+                    let min_x = box_sel.start_pos.x.min(current_pos.x);
+                    let max_x = box_sel.start_pos.x.max(current_pos.x);
+                    let min_y = box_sel.start_pos.y.min(current_pos.y);
+                    let max_y = box_sel.start_pos.y.max(current_pos.y);
+                    let selection_rect = egui::Rect::from_min_max(
+                        egui::pos2(min_x, min_y),
+                        egui::pos2(max_x, max_y),
+                    );
 
-                        // Draw the selection box
-                        ui.painter().rect_stroke(
-                            selection_rect,
-                            0.0,
-                            egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 150, 255)),
-                            egui::epaint::StrokeKind::Outside,
-                        );
-                        ui.painter().rect_filled(
-                            selection_rect,
-                            0.0,
-                            egui::Color32::from_rgba_premultiplied(100, 150, 255, 30),
-                        );
+                    // Draw the selection box
+                    ui.painter().rect_stroke(
+                        selection_rect,
+                        0.0,
+                        egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 150, 255)),
+                        egui::epaint::StrokeKind::Outside,
+                    );
+                    ui.painter().rect_filled(
+                        selection_rect,
+                        0.0,
+                        egui::Color32::from_rgba_premultiplied(100, 150, 255, 30),
+                    );
 
-                        // Update selection based on box
-                        if bg_response.dragged() {
-                            let ctrl_or_cmd_pressed = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
-                            
-                            // If not holding ctrl/cmd, deselect all first
-                            if !ctrl_or_cmd_pressed {
-                                for id in &visible_nodes {
-                                    if actions.is_selected(id) {
-                                        actions.on_select(id, false);
-                                    }
+                    // Update selection based on box
+                    if bg_response.dragged() {
+                        let ctrl_or_cmd_pressed = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+                        
+                        // If not holding ctrl/cmd, deselect all first
+                        if !ctrl_or_cmd_pressed {
+                            for id in &visible_nodes {
+                                if actions.is_selected(id) {
+                                    actions.on_select(id, false);
                                 }
                             }
-
-                            // Select nodes that intersect with the box
-                            for (node_id, node_rect) in &node_rects {
-                                if selection_rect.intersects(*node_rect) {
-                                    actions.on_select(node_id, true);
-                                }
-                            }
-                            outliner_response.changed = true;
                         }
+
+                        // Select nodes that intersect with the box
+                        for (node_id, node_rect) in &node_rects {
+                            if selection_rect.intersects(*node_rect) {
+                                actions.on_select(node_id, true);
+                            }
+                        }
+                        outliner_response.changed = true;
                     }
                 }
 
@@ -752,11 +750,22 @@ impl Outliner {
 
                     // Handle click to toggle visibility
                     if icon_response.clicked() {
-                        actions.on_visibility_toggle(&node_id);
-                        // If this is a collection, apply to all children
+                        // Determine the new visibility state (opposite of current)
+                        let new_visibility = !is_visible;
+                        
+                        // Set the parent to the new state
+                        if new_visibility != is_visible {
+                            actions.on_visibility_toggle(&node_id);
+                        }
+                        
+                        // If this is a collection, set all children to the same state
                         if is_collection {
                             for child_id in Self::collect_descendant_ids(node) {
-                                actions.on_visibility_toggle(&child_id);
+                                let child_visible = actions.is_visible(&child_id);
+                                // Only toggle if the child's state differs from target
+                                if child_visible != new_visibility {
+                                    actions.on_visibility_toggle(&child_id);
+                                }
                             }
                         }
                     }

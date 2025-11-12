@@ -8,16 +8,26 @@ A flexible tree/outliner widget for [egui](https://github.com/emilk/egui) - hier
 [![Documentation](https://docs.rs/egui-arbor/badge.svg)](https://docs.rs/egui-arbor)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
 
+## Version Compatibility
+
+| egui-arbor | egui | bevy | bevy_egui |
+|------------|------|------|-----------|
+| 0.2.0      | 0.31 | 0.16 | 0.34      |
+
+> **Note**: The `bevy` and `bevy_egui` versions are only required if you're using the Bevy integration example.
+
 ## Features
 
 - **Hierarchical Tree View**: Display nested data structures with collections and entities
 - **Expand/Collapse**: Navigate through tree hierarchy with visual expand/collapse arrows
 - **Drag & Drop**: Reorder and reparent nodes with Before/After/Inside positioning
+- **Multi-Selection**: Full multi-select support with keyboard modifiers (Ctrl/Cmd for toggle, Shift for range)
 - **Action Icons**: Built-in visibility, lock, and selection toggles with custom icon support
+- **Blender-Style Visibility**: Parent visibility changes cascade to all children
 - **Inline Editing**: Double-click to rename nodes with keyboard shortcuts
-- **Node Selection**: Single or multi-selection with visual highlighting
 - **Customizable Styling**: Configure indentation, colors, icons, and spacing
 - **Trait-Based Integration**: Works with any data structure implementing [`OutlinerNode`](src/traits.rs:96)
+- **Bevy Integration**: Full support for Bevy game engine with 3D scene synchronization
 - **egui Memory Integration**: Automatic state persistence across frames
 
 ## Quick Start
@@ -26,7 +36,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-egui-arbor = "0.1"
+egui-arbor = "0.2"
 ```
 
 ### Basic Example
@@ -102,21 +112,47 @@ fn show_tree(ui: &mut egui::Ui, nodes: &[TreeNode], actions: &mut MyActions) {
 }
 ```
 
-## Comprehensive Example
+## Examples
 
-Run the included example to see all features in action:
+### Basic Example
+
+<img src="assets/images/basic_example_image.png" width="600" alt="Basic example showing tree structure with drag & drop">
+
+Run the basic example to see all core features in action:
 
 ```bash
 cargo run --example basic
 ```
 
-The example demonstrates:
+Features demonstrated:
 - Tree structure with collections and entities
 - All action icons (visibility, lock, selection)
 - Drag & drop with visual feedback
+- Multi-selection with keyboard modifiers
 - Inline renaming with double-click
 - Event logging and statistics
 - Custom styling options
+
+### Bevy 3D Outliner Example
+
+<img src="assets/images/bevy_example_image.png" width="600" alt="Bevy 3D outliner with synchronized scene hierarchy">
+
+Run the Bevy integration example to see egui-arbor working with a 3D scene:
+
+```bash
+cargo run --example bevy_3d_outliner
+```
+
+Features demonstrated:
+- Integration with Bevy 0.16.1 game engine
+- 3D scene with three collections (Red, Green, Blue)
+- Tree outliner synchronized with 3D scene visibility
+- Blender-style visibility behavior (parent changes cascade to children)
+- Drag and drop to reorganize scene hierarchy
+- Inline rename for scene objects
+- Orbit camera controls (left mouse: orbit, right mouse: pan, scroll: zoom)
+
+The example creates 9 objects total (3 shapes × 3 colors) arranged in a grid pattern, with a tree outliner on the left side that controls their visibility in real-time.
 
 ## Core Concepts
 
@@ -225,15 +261,13 @@ egui-arbor follows egui ecosystem conventions:
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for detailed design documentation.
 
-## Features
-
-### Optional Features
+## Optional Features
 
 - `serde`: Enable serialization support for state persistence
 
 ```toml
 [dependencies]
-egui-arbor = { version = "0.1", features = ["serde"] }
+egui-arbor = { version = "0.2", features = ["serde"] }
 ```
 
 ## Minimum Supported Rust Version (MSRV)

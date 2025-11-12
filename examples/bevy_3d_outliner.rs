@@ -216,6 +216,28 @@ impl Default for TreeActions {
     }
 }
 
+impl TreeActions {
+    /// Recursively set visibility for all children of a node
+    /// Blender-style: sets all children to match the parent's new state
+    fn set_children_visibility(&mut self, parent_id: u64, visible: bool) {
+        // Map parent IDs to their children based on the tree structure
+        let child_ids = match parent_id {
+            0 => vec![1, 2, 3],      // Collection Red
+            4 => vec![5, 6, 7],      // Collection Green
+            8 => vec![9, 10, 11],    // Collection Blue
+            _ => vec![],
+        };
+        
+        for child_id in child_ids {
+            if visible {
+                self.visible.insert(child_id);
+            } else {
+                self.visible.remove(&child_id);
+            }
+        }
+    }
+}
+
 impl OutlinerActions<TreeNode> for TreeActions {
     fn on_rename(&mut self, id: &u64, new_name: String) {
         // Note: The actual renaming happens in the ui_system where we have mutable access to SceneTree
@@ -240,11 +262,18 @@ impl OutlinerActions<TreeNode> for TreeActions {
     }
 
     fn on_visibility_toggle(&mut self, id: &u64) {
-        if self.visible.contains(id) {
-            self.visible.remove(id);
-        } else {
+        let was_visible = self.visible.contains(id);
+        let new_state = !was_visible;
+        
+        // Set the parent's new state
+        if new_state {
             self.visible.insert(*id);
+        } else {
+            self.visible.remove(id);
         }
+        
+        // Set all children to match the parent's new state (Blender-style)
+        self.set_children_visibility(*id, new_state);
     }
 
     fn on_lock_toggle(&mut self, _id: &u64) {}
