@@ -129,7 +129,7 @@ pub trait TreeOperations: OutlinerNode + Sized + Clone {
     /// ```
     fn remove_node(&mut self, id: &Self::Id) -> Option<Self> {
         let children = self.children_mut();
-        
+
         // Check direct children first
         for i in 0..children.len() {
             if children[i].id() == *id {
@@ -212,7 +212,7 @@ pub trait TreeOperations: OutlinerNode + Sized + Clone {
                 }
                 return false;
             }
-            
+
             // Recursively search in this child
             if children[i].insert_node(target_id, node.clone(), position) {
                 return true;
@@ -358,9 +358,11 @@ mod tests {
     #[test]
     fn test_remove_node_nested() {
         let mut root = TestNode::new(1, "root", true).with_children(vec![
-            TestNode::new(2, "child1", true).with_children(vec![
-                TestNode::new(3, "grandchild", false),
-            ]),
+            TestNode::new(2, "child1", true).with_children(vec![TestNode::new(
+                3,
+                "grandchild",
+                false,
+            )]),
         ]);
 
         let removed = root.remove_node(&3);
@@ -371,9 +373,8 @@ mod tests {
 
     #[test]
     fn test_remove_node_not_found() {
-        let mut root = TestNode::new(1, "root", true).with_children(vec![
-            TestNode::new(2, "child1", false),
-        ]);
+        let mut root =
+            TestNode::new(1, "root", true).with_children(vec![TestNode::new(2, "child1", false)]);
 
         let removed = root.remove_node(&999);
         assert!(removed.is_none());
@@ -399,7 +400,7 @@ mod tests {
 
         let new_node = TestNode::new(4, "new", false);
         let result = root.insert_node(&3, new_node, DropPosition::Before);
-        
+
         assert!(result);
         assert_eq!(root.children.len(), 3);
         assert_eq!(root.children[1].id, 4);
@@ -415,7 +416,7 @@ mod tests {
 
         let new_node = TestNode::new(4, "new", false);
         let result = root.insert_node(&2, new_node, DropPosition::After);
-        
+
         assert!(result);
         assert_eq!(root.children.len(), 3);
         assert_eq!(root.children[0].id, 2);
@@ -424,13 +425,12 @@ mod tests {
 
     #[test]
     fn test_insert_node_inside_non_collection() {
-        let mut root = TestNode::new(1, "root", true).with_children(vec![
-            TestNode::new(2, "child1", false),
-        ]);
+        let mut root =
+            TestNode::new(1, "root", true).with_children(vec![TestNode::new(2, "child1", false)]);
 
         let new_node = TestNode::new(3, "new", false);
         let result = root.insert_node(&2, new_node, DropPosition::Inside);
-        
+
         assert!(!result);
         assert_eq!(root.children.len(), 1);
     }
@@ -438,9 +438,11 @@ mod tests {
     #[test]
     fn test_find_node() {
         let root = TestNode::new(1, "root", true).with_children(vec![
-            TestNode::new(2, "child1", true).with_children(vec![
-                TestNode::new(3, "grandchild", false),
-            ]),
+            TestNode::new(2, "child1", true).with_children(vec![TestNode::new(
+                3,
+                "grandchild",
+                false,
+            )]),
         ]);
 
         let found = root.find_node(&3);
@@ -453,13 +455,12 @@ mod tests {
 
     #[test]
     fn test_find_node_mut() {
-        let mut root = TestNode::new(1, "root", true).with_children(vec![
-            TestNode::new(2, "child1", false),
-        ]);
+        let mut root =
+            TestNode::new(1, "root", true).with_children(vec![TestNode::new(2, "child1", false)]);
 
         let found = root.find_node_mut(&2);
         assert!(found.is_some());
-        
+
         if let Some(node) = found {
             node.name = "modified".to_string();
         }

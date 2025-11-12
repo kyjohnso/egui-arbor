@@ -116,13 +116,13 @@ where
 {
     /// Set of selected node IDs.
     selected: HashSet<Id>,
-    
+
     /// Set of visible node IDs.
     visible: HashSet<Id>,
-    
+
     /// Set of locked node IDs.
     locked: HashSet<Id>,
-    
+
     /// Optional event log for tracking interactions.
     event_log: Option<EventLog<Id>>,
 }
@@ -566,7 +566,7 @@ mod tests {
         let mut actions = DefaultActions::<u64>::new();
 
         assert!(!OutlinerActions::<TestNode>::is_selected(&actions, &1));
-        
+
         OutlinerActions::<TestNode>::on_select(&mut actions, &1, true);
         assert!(OutlinerActions::<TestNode>::is_selected(&actions, &1));
         assert_eq!(actions.selected_count(), 1);
@@ -584,7 +584,7 @@ mod tests {
         let mut actions = DefaultActions::<u64>::new();
 
         assert!(!OutlinerActions::<TestNode>::is_visible(&actions, &1));
-        
+
         OutlinerActions::<TestNode>::on_visibility_toggle(&mut actions, &1);
         assert!(OutlinerActions::<TestNode>::is_visible(&actions, &1));
         assert_eq!(actions.visible_count(), 1);
@@ -599,7 +599,7 @@ mod tests {
         let mut actions = DefaultActions::<u64>::new();
 
         assert!(!OutlinerActions::<TestNode>::is_locked(&actions, &1));
-        
+
         OutlinerActions::<TestNode>::on_lock_toggle(&mut actions, &1);
         assert!(OutlinerActions::<TestNode>::is_locked(&actions, &1));
         assert_eq!(actions.locked_count(), 1);

@@ -344,11 +344,11 @@ mod tests {
 
     // Since we can't easily construct egui::Response in tests, we'll test
     // the OutlinerResponse fields and methods directly
-    
+
     #[test]
     fn test_drop_event_new() {
         let event = DropEvent::new(10, 20, DropPosition::Before);
-        
+
         assert_eq!(event.source, 10);
         assert_eq!(event.target, 20);
         assert_eq!(event.position, DropPosition::Before);
@@ -359,7 +359,7 @@ mod tests {
         let event_before = DropEvent::new(1, 2, DropPosition::Before);
         let event_after = DropEvent::new(1, 2, DropPosition::After);
         let event_inside = DropEvent::new(1, 2, DropPosition::Inside);
-        
+
         assert_eq!(event_before.position, DropPosition::Before);
         assert_eq!(event_after.position, DropPosition::After);
         assert_eq!(event_inside.position, DropPosition::Inside);
@@ -371,7 +371,7 @@ mod tests {
         let event2 = DropEvent::new(1, 2, DropPosition::Inside);
         let event3 = DropEvent::new(1, 2, DropPosition::Before);
         let event4 = DropEvent::new(2, 3, DropPosition::Inside);
-        
+
         assert_eq!(event1, event2);
         assert_ne!(event1, event3);
         assert_ne!(event1, event4);
@@ -381,7 +381,7 @@ mod tests {
     fn test_drop_event_clone() {
         let event = DropEvent::new(5, 10, DropPosition::After);
         let cloned = event.clone();
-        
+
         assert_eq!(event, cloned);
         assert_eq!(cloned.source, 5);
         assert_eq!(cloned.target, 10);
@@ -392,10 +392,13 @@ mod tests {
     fn test_drop_event_with_different_id_types() {
         let event_u64 = DropEvent::new(1u64, 2u64, DropPosition::Inside);
         assert_eq!(event_u64.source, 1u64);
-        
-        let event_string = DropEvent::new("node1".to_string(), "node2".to_string(), DropPosition::Before);
+
+        let event_string = DropEvent::new(
+            "node1".to_string(),
+            "node2".to_string(),
+            DropPosition::Before,
+        );
         assert_eq!(event_string.source, "node1".to_string());
         assert_eq!(event_string.target, "node2".to_string());
     }
-
 }

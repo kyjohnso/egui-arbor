@@ -213,9 +213,10 @@ impl Style {
 ///
 /// Determines the visual appearance of the icon used to expand and collapse
 /// tree nodes in the outliner.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ExpandIconStyle {
     /// Simple arrow style (▶ when collapsed, ▼ when expanded).
+    #[default]
     Arrow,
 
     /// Plus/minus signs (+ when collapsed, - when expanded).
@@ -268,11 +269,5 @@ impl ExpandIconStyle {
             ExpandIconStyle::ChevronRight => "⌄",
             ExpandIconStyle::Custom { expanded, .. } => expanded,
         }
-    }
-}
-
-impl Default for ExpandIconStyle {
-    fn default() -> Self {
-        Self::Arrow
     }
 }

@@ -46,7 +46,7 @@ impl BoxSelectionState {
 /// use std::collections::HashSet;
 ///
 /// let mut state = OutlinerState::<String>::default();
-/// 
+///
 /// // Toggle expansion state
 /// state.toggle_expanded(&"node1".to_string());
 /// assert!(state.is_expanded(&"node1".to_string()));
@@ -512,9 +512,9 @@ mod tests {
     #[test]
     fn test_drag_drop_state_access() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         assert!(!state.drag_drop().is_dragging());
-        
+
         state.drag_drop_mut().start_drag(42);
         assert!(state.drag_drop().is_dragging());
         assert_eq!(state.drag_drop().dragging_id(), Some(&42));
@@ -523,15 +523,15 @@ mod tests {
     #[test]
     fn test_last_selected() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         assert_eq!(state.last_selected(), None);
-        
+
         state.set_last_selected(Some(1));
         assert_eq!(state.last_selected(), Some(&1));
-        
+
         state.set_last_selected(Some(2));
         assert_eq!(state.last_selected(), Some(&2));
-        
+
         state.set_last_selected(None);
         assert_eq!(state.last_selected(), None);
     }
@@ -539,17 +539,17 @@ mod tests {
     #[test]
     fn test_box_selection_lifecycle() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         assert_eq!(state.box_selection(), None);
-        
+
         let start_pos = egui::pos2(10.0, 20.0);
         state.start_box_selection(start_pos);
-        
+
         let box_sel = state.box_selection();
         assert!(box_sel.is_some());
         assert_eq!(box_sel.unwrap().start_pos, start_pos);
         assert!(box_sel.unwrap().active);
-        
+
         state.end_box_selection();
         assert_eq!(state.box_selection(), None);
     }
@@ -558,7 +558,7 @@ mod tests {
     fn test_box_selection_state_new() {
         let pos = egui::pos2(5.0, 10.0);
         let box_sel = BoxSelectionState::new(pos);
-        
+
         assert_eq!(box_sel.start_pos, pos);
         assert!(box_sel.active);
     }
@@ -566,13 +566,13 @@ mod tests {
     #[test]
     fn test_dragging_nodes() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         assert!(state.dragging_nodes().is_empty());
-        
+
         let nodes = vec![1, 2, 3];
         state.set_dragging_nodes(nodes.clone());
         assert_eq!(state.dragging_nodes(), &[1, 2, 3]);
-        
+
         state.clear_dragging_nodes();
         assert!(state.dragging_nodes().is_empty());
     }
@@ -580,10 +580,10 @@ mod tests {
     #[test]
     fn test_dragging_nodes_update() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         state.set_dragging_nodes(vec![1, 2]);
         assert_eq!(state.dragging_nodes().len(), 2);
-        
+
         state.set_dragging_nodes(vec![3, 4, 5]);
         assert_eq!(state.dragging_nodes().len(), 3);
         assert_eq!(state.dragging_nodes(), &[3, 4, 5]);
@@ -592,20 +592,20 @@ mod tests {
     #[test]
     fn test_combined_state_operations() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         // Expand some nodes
         state.set_expanded(&1, true);
         state.set_expanded(&2, true);
-        
+
         // Start editing
         state.start_editing(3, "Node 3".to_string());
-        
+
         // Set last selected
         state.set_last_selected(Some(4));
-        
+
         // Start drag
         state.drag_drop_mut().start_drag(5);
-        
+
         // Verify all states are maintained
         assert!(state.is_expanded(&1));
         assert!(state.is_expanded(&2));
@@ -617,21 +617,21 @@ mod tests {
     #[test]
     fn test_expansion_persistence() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         // Expand multiple nodes
         for i in 1..=10 {
             state.set_expanded(&i, true);
         }
-        
+
         // Verify all are expanded
         for i in 1..=10 {
             assert!(state.is_expanded(&i));
         }
-        
+
         // Collapse some
         state.set_expanded(&3, false);
         state.set_expanded(&7, false);
-        
+
         // Verify correct state
         assert!(state.is_expanded(&1));
         assert!(state.is_expanded(&2));
@@ -644,23 +644,23 @@ mod tests {
     #[test]
     fn test_drag_drop_integration() {
         let mut state = OutlinerState::<u64>::default();
-        
+
         // Start drag
         state.drag_drop_mut().start_drag(1);
         state.set_dragging_nodes(vec![1, 2, 3]);
-        
+
         // Update hover
         state.drag_drop_mut().update_hover(4, DropPosition::Inside);
-        
+
         // Verify state
         assert!(state.drag_drop().is_dragging());
         assert_eq!(state.dragging_nodes(), &[1, 2, 3]);
         assert!(state.drag_drop().is_hover_target(&4));
-        
+
         // End drag
         let result = state.drag_drop_mut().end_drag();
         assert!(result.is_some());
-        
+
         // Clear dragging nodes
         state.clear_dragging_nodes();
         assert!(state.dragging_nodes().is_empty());
@@ -670,10 +670,10 @@ mod tests {
     fn test_state_isolation() {
         let mut state1 = OutlinerState::<u64>::default();
         let mut state2 = OutlinerState::<u64>::default();
-        
+
         state1.set_expanded(&1, true);
         state2.set_expanded(&2, true);
-        
+
         assert!(state1.is_expanded(&1));
         assert!(!state1.is_expanded(&2));
         assert!(!state2.is_expanded(&1));
