@@ -52,7 +52,7 @@ impl BoxSelectionState {
 /// assert!(state.is_expanded(&"node1".to_string()));
 ///
 /// // Start editing a node
-/// state.start_editing("node2".to_string());
+/// state.start_editing("node2".to_string(), "Node 2".to_string());
 /// assert!(state.is_editing(&"node2".to_string()));
 /// ```
 #[derive(Clone, Debug)]
@@ -72,6 +72,13 @@ where
     /// When `Some(id)`, the node with the given ID is in edit mode (e.g., for renaming).
     /// Only one node can be edited at a time.
     editing: Option<Id>,
+
+    /// The text being edited for the current node.
+    ///
+    /// This stores the text content while editing is in progress.
+    /// This field is not persisted across frames (it's transient state).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    editing_text: String,
 
     /// Drag-and-drop state for this outliner.
     ///
@@ -111,6 +118,7 @@ where
         Self {
             expanded: HashSet::new(),
             editing: None,
+            editing_text: String::new(),
             drag_drop: DragDropState::new(),
             last_selected: None,
             box_selection: None,
@@ -263,7 +271,7 @@ where
     /// ```
     /// # use egui_arbor::OutlinerState;
     /// let mut state = OutlinerState::<String>::default();
-    /// state.start_editing("node1".to_string());
+    /// state.start_editing("node1".to_string(), "Node 1".to_string());
     /// assert!(state.is_editing(&"node1".to_string()));
     /// ```
     pub fn is_editing(&self, id: &Id) -> bool {
@@ -278,17 +286,19 @@ where
     /// # Parameters
     ///
     /// * `id` - The ID of the node to start editing
+    /// * `initial_text` - The initial text to display in the edit field
     ///
     /// # Examples
     ///
     /// ```
     /// # use egui_arbor::OutlinerState;
     /// let mut state = OutlinerState::<String>::default();
-    /// state.start_editing("node1".to_string());
+    /// state.start_editing("node1".to_string(), "Initial Name".to_string());
     /// assert!(state.is_editing(&"node1".to_string()));
     /// ```
-    pub fn start_editing(&mut self, id: Id) {
+    pub fn start_editing(&mut self, id: Id, initial_text: String) {
         self.editing = Some(id);
+        self.editing_text = initial_text;
     }
 
     /// Stops editing the currently edited node, if any.
@@ -298,12 +308,25 @@ where
     /// ```
     /// # use egui_arbor::OutlinerState;
     /// let mut state = OutlinerState::<String>::default();
-    /// state.start_editing("node1".to_string());
+    /// state.start_editing("node1".to_string(), "Name".to_string());
     /// state.stop_editing();
     /// assert!(!state.is_editing(&"node1".to_string()));
     /// ```
     pub fn stop_editing(&mut self) {
         self.editing = None;
+        self.editing_text.clear();
+    }
+
+    /// Returns a mutable reference to the editing text.
+    ///
+    /// This allows the text edit widget to modify the text directly.
+    pub fn editing_text_mut(&mut self) -> &mut String {
+        &mut self.editing_text
+    }
+
+    /// Returns a reference to the editing text.
+    pub fn editing_text(&self) -> &str {
+        &self.editing_text
     }
 
     /// Returns a reference to the drag-drop state.
@@ -456,17 +479,20 @@ mod tests {
 
         assert!(!state.is_editing(&id1));
 
-        state.start_editing(id1.clone());
+        state.start_editing(id1.clone(), "Node 1".to_string());
         assert!(state.is_editing(&id1));
         assert!(!state.is_editing(&id2));
+        assert_eq!(state.editing_text(), "Node 1");
 
-        state.start_editing(id2.clone());
+        state.start_editing(id2.clone(), "Node 2".to_string());
         assert!(!state.is_editing(&id1));
         assert!(state.is_editing(&id2));
+        assert_eq!(state.editing_text(), "Node 2");
 
         state.stop_editing();
         assert!(!state.is_editing(&id1));
         assert!(!state.is_editing(&id2));
+        assert_eq!(state.editing_text(), "");
     }
 
     #[test]
@@ -474,11 +500,13 @@ mod tests {
         let mut state = OutlinerState::<String>::default();
         let id = "node1".to_string();
 
-        state.start_editing(id.clone());
+        state.start_editing(id.clone(), "First".to_string());
         assert!(state.is_editing(&id));
+        assert_eq!(state.editing_text(), "First");
 
-        state.start_editing(id.clone());
+        state.start_editing(id.clone(), "Second".to_string());
         assert!(state.is_editing(&id));
+        assert_eq!(state.editing_text(), "Second");
     }
 
     #[test]
@@ -570,7 +598,7 @@ mod tests {
         state.set_expanded(&2, true);
         
         // Start editing
-        state.start_editing(3);
+        state.start_editing(3, "Node 3".to_string());
         
         // Set last selected
         state.set_last_selected(Some(4));
