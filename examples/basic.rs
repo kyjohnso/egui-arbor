@@ -339,35 +339,6 @@ impl TreeActions {
         }
     }
 
-    /// Recursively set visibility for all children of a node
-    /// Blender-style: sets all children to match the parent's new state
-    fn set_children_visibility(&mut self, parent_id: u64, visible: bool) {
-        // Map parent IDs to their children based on the known tree structure
-        let child_ids = match parent_id {
-            0 => vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
-            1 => vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-            4 => vec![5, 6, 7, 8, 9],
-            10 => vec![11, 12, 13],
-            14 => vec![15, 16, 17],
-            18 => vec![19, 20, 21],
-            22 => vec![23, 24, 25, 26, 27, 28],
-            23 => vec![24, 25],
-            26 => vec![27, 28],
-            33 => vec![34, 35, 36, 37, 38, 39, 40, 41],
-            38 => vec![39, 40, 41],
-            42 => vec![43, 44, 45],
-            _ => vec![],
-        };
-        
-        for child_id in child_ids {
-            if visible {
-                self.visible.insert(child_id);
-            } else {
-                self.visible.remove(&child_id);
-            }
-        }
-    }
-
     /// Get statistics about current node states.
     fn get_stats(&self) -> NodeStats {
         NodeStats {
@@ -457,29 +428,22 @@ impl OutlinerActions<TreeNode> for TreeActions {
 
     /// Called when the visibility action icon is clicked.
     /// Toggles the node between visible and hidden states.
-    /// Blender-style: sets all children to match the parent's new state.
+    /// Note: The library automatically propagates visibility to all descendants.
     fn on_visibility_toggle(&mut self, id: &u64) {
         let was_visible = self.visible.contains(id);
         let new_state = !was_visible;
         
-        // Set the parent's new state
+        // Toggle the node's visibility state
         if new_state {
             self.visible.insert(*id);
-        } else {
-            self.visible.remove(id);
-        }
-        
-        // Set all children to match the parent's new state
-        self.set_children_visibility(*id, new_state);
-        
-        if new_state {
             self.log_event(
-                format!("Shown node {} and all children", id),
+                format!("Shown node {}", id),
                 EventType::Visibility,
             );
         } else {
+            self.visible.remove(id);
             self.log_event(
-                format!("Hidden node {} and all children", id),
+                format!("Hidden node {}", id),
                 EventType::Visibility,
             );
         }
